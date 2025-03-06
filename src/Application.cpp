@@ -87,9 +87,15 @@ void Application::Frame()
     auto &cmdList = mPerFrameResources[mCurrentFrame].commandList;
     auto &isCmdListDone = mPerFrameResources[mCurrentFrame].isCommandListDone;
 
-    f32 backgroundColor[4] = {1.0f, 1.0f, 0.0f, 1.0f};
-    cmdList->BeginRenderingOnBackbuffer(backgroundColor);
-    cmdList->EndRendering();
+    cmdList->Begin();
+
+    {
+        f32 backgroundColor[4] = {1.0f, 1.0f, 0.0f, 1.0f};
+        cmdList->BeginRenderingOnBackbuffer(backgroundColor);
+        cmdList->EndRendering();
+    }
+
+    cmdList->End();
 
     cmdList->SubmitToScreen(isCmdListDone.get());
 

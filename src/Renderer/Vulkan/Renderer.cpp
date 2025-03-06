@@ -10,7 +10,7 @@
 
 using namespace Vulkan;
 
-static constexpr const u32 API_VERSION = VK_API_VERSION_1_2;
+static constexpr const u32 API_VERSION = VK_API_VERSION_1_3;
 
 #define PIPELINES_CACHE_FILE "pipelines.cache"
 

@@ -198,8 +198,8 @@ void Vulkan::LoadFunctionsDevice(VkDevice device)
     GET_DEV_FN(ResetCommandPool, device);
     GET_DEV_FN(BeginCommandBuffer, device);
     GET_DEV_FN(EndCommandBuffer, device);
-    GET_DEV_FN_OPT(CmdBeginRendering, device);
-    GET_DEV_FN_OPT(CmdEndRendering, device);
+    GET_DEV_FN(CmdBeginRendering, device);
+    GET_DEV_FN(CmdEndRendering, device);
     GET_DEV_FN(AcquireNextImageKHR, device);
     GET_DEV_FN(CreateFence, device);
     GET_DEV_FN(DestroyFence, device);

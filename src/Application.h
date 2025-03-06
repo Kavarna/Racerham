@@ -37,7 +37,7 @@ private:
 
 private:
     std::array<PerFrameResource, MAX_IN_FLIGHT_FRAMES> mPerFrameResources;
-    u32 mCurrentFrame;
+    u32 mCurrentFrame = 0;
 
     GLFWwindow *mWindow;
 
