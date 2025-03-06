@@ -1,0 +1,46 @@
+#pragma once
+
+#include "GLFW/glfw3.h"
+#include "Renderer/Vulkan/Renderer.h"
+#include "src/Renderer/Vulkan/CommandList.h"
+#include "src/Renderer/Vulkan/SynchronizationObjects.h"
+#include <Jnrlib/Singletone.h>
+
+class Application : public Jnrlib::ISingletone<Application>
+{
+    MAKE_SINGLETONE_CAPABLE(Application);
+    static constexpr u32 MAX_IN_FLIGHT_FRAMES = 3;
+
+private:
+    Application();
+    ~Application();
+
+public:
+    void Run();
+
+private:
+    void InitWindow();
+    Vulkan::VulkanRendererInfo GetRendererCreateInfo();
+    void InitPerFrameResources();
+
+    void Destroy();
+
+private:
+    void Frame();
+
+private:
+    struct PerFrameResource
+    {
+        std::unique_ptr<Vulkan::CommandList> commandList;
+        std::unique_ptr<Vulkan::CPUSynchronizationObject> isCommandListDone;
+    };
+
+private:
+    std::array<PerFrameResource, MAX_IN_FLIGHT_FRAMES> mPerFrameResources;
+    u32 mCurrentFrame;
+
+    GLFWwindow *mWindow;
+
+    uint32_t mWidth;
+    uint32_t mHeight;
+};

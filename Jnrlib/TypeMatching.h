@@ -1,0 +1,76 @@
+#pragma once
+
+#include <array>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#include "BasicTypes.h"
+#include "TypeHelpers.h"
+
+namespace Jnrlib
+{
+namespace internal
+{
+static const unsigned int FRONT_SIZE =
+    sizeof("Jnrlib::internal::GetTypeNameHelper<") - 1u;
+static const unsigned int BACK_SIZE = sizeof(">::GetTypeName") - 1u;
+
+template <typename T> struct GetTypeNameHelper
+{
+    static const char *GetTypeName(void)
+    {
+        static const size_t size =
+            sizeof(__FUNCTION__) - FRONT_SIZE - BACK_SIZE;
+        static char typeName[size] = {};
+        memcpy(typeName, __FUNCTION__ + FRONT_SIZE, size - 1u);
+
+        return typeName;
+    }
+};
+} // namespace internal
+
+template <typename T> const char *GetTypeName(void)
+{
+    return internal::GetTypeNameHelper<T>::GetTypeName();
+}
+
+template <typename T> std::string to_string(T &&t)
+{
+    std::stringstream stream;
+    stream << t;
+    return stream.str();
+}
+} // namespace Jnrlib
+
+namespace Detail
+{
+template <typename T>
+auto IsIterableImpl(int)
+    -> decltype(begin(std::declval<T &>()) !=
+                    end(std::declval<T &>()), // begin/end and operator !=
+                void(),                       // Handle evil operator ,
+                ++std::declval<
+                    decltype(begin(std::declval<T &>())) &>(), // operator
+                                                               // ++
+                void(*begin(std::declval<T &>())),             // operator*
+                std::true_type{});
+
+template <typename T> std::false_type IsIterableImpl(...);
+} // namespace Detail
+
+template <typename T> using IsIterable = decltype(Detail::IsIterableImpl<T>(0));
+
+template <typename T> struct IsDefaultConstructible
+{
+    template <typename U> static constexpr u32 SFINAE(decltype(U()) *);
+    template <typename U> static constexpr uint8_t SFINAE(...);
+
+    static const bool value = sizeof(SFINAE<T>(nullptr)) == sizeof(int32_t);
+};
+
+template <typename T, typename U> struct GetTypeInsideGenericList
+{
+};
+
+// To be added as needed

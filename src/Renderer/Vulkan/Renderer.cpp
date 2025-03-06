@@ -1,0 +1,936 @@
+#include "Renderer.h"
+#include "CommandList.h"
+#include "VulkanLoader.h"
+#include "vulkan/vulkan_core.h"
+
+#include <FileHelpers.h>
+
+#include <algorithm>
+#include <unordered_map>
+
+using namespace Vulkan;
+
+static constexpr const u32 API_VERSION = VK_API_VERSION_1_2;
+
+#define PIPELINES_CACHE_FILE "pipelines.cache"
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT messageType,
+    const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData, void *pUserData)
+{
+    switch (messageSeverity)
+    {
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+        SHOWINFO("Validation layer: ", pCallbackData->pMessage);
+        break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+        SHOWINFO("Validation layer: ", pCallbackData->pMessage);
+        break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+        SHOWWARNING("Validation layer: ", pCallbackData->pMessage);
+        break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+        SHOWERROR("Validation layer: ", pCallbackData->pMessage);
+        break;
+    default:
+        SHOWERROR("How did you trigger this type of validation message?");
+    }
+
+    return VK_FALSE;
+}
+
+Renderer::Renderer(VulkanRendererInfo const &info)
+{
+    mWindow = info.window;
+    ThrowIfFailed(mWindow != nullptr,
+                  "In order to use the renderer, a window has to be specified");
+    LoadFunctions();
+    InitInstance(info);
+    InitSurface();
+    PickPhysicalDevice();
+    InitDevice(info);
+    InitAllocator();
+    InitSwapchain();
+
+    DSHOWINFO("Vulkan renderer initialised successfully");
+}
+
+Renderer::~Renderer()
+{
+    if (mEmptyPipelineLayout != VK_NULL_HANDLE)
+    {
+        jnrDestroyPipelineLayout(mDevice, mEmptyPipelineLayout, nullptr);
+    }
+    if (mPointSampler != VK_NULL_HANDLE)
+    {
+        jnrDestroySampler(mDevice, mPointSampler, nullptr);
+    }
+    if (mFontSampler != VK_NULL_HANDLE)
+    {
+        jnrDestroySampler(mDevice, mFontSampler, nullptr);
+    }
+    if (mPipelineCache != VK_NULL_HANDLE)
+    {
+        size_t size;
+
+        if (jnrGetPipelineCacheData(mDevice, mPipelineCache, &size, nullptr) ==
+            VK_SUCCESS)
+        {
+            std::vector<unsigned char> bytes(size);
+            if (jnrGetPipelineCacheData(mDevice, mPipelineCache, &size,
+                                        bytes.data()) == VK_SUCCESS)
+            {
+                Jnrlib::DumpWholeFile(PIPELINES_CACHE_FILE, bytes);
+            }
+        }
+
+        jnrDestroyPipelineCache(mDevice, mPipelineCache, nullptr);
+    }
+    for (auto const &view : mSwapchainImageViews)
+    {
+        jnrDestroyImageView(mDevice, view, nullptr);
+    }
+    jnrDestroySwapchainKHR(mDevice, mSwapchain, nullptr);
+    jnrDestroySurfaceKHR(mInstance, mRenderingSurface, nullptr);
+
+    vmaDestroyAllocator(mAllocator);
+
+    jnrDestroyDevice(mDevice, nullptr);
+    if (mInstanceExtensions.debugUtils.has_value())
+    {
+        jnrDestroyDebugUtilsMessengerEXT(mInstance, mDebugUtilsMessenger,
+                                         nullptr);
+    }
+    jnrDestroyInstance(mInstance, nullptr);
+
+    DSHOWINFO("Vulkan renderer uninitialised successfully");
+}
+
+void Renderer::WaitIdle()
+{
+    vkThrowIfFailed(jnrDeviceWaitIdle(mDevice));
+}
+
+void Renderer::OnResize()
+{
+    InitSwapchain();
+}
+
+VkDevice Renderer::GetDevice()
+{
+    return mDevice;
+}
+
+void Renderer::InitInstance(VulkanRendererInfo const &info)
+{
+    VkApplicationInfo appInfo = {};
+    {
+        appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        appInfo.pNext = nullptr;
+        appInfo.apiVersion = API_VERSION;
+        appInfo.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
+        appInfo.engineVersion = VK_MAKE_VERSION(0, 0, 1);
+        appInfo.pApplicationName = "LaughLive";
+        appInfo.pEngineName = "JNRenderer";
+    }
+
+    mInstanceLayers = GetEnabledInstanceLayers(info.instanceLayers);
+    mInstanceExtensions =
+        HandleEnabledInstanceExtensions(info.instanceExtensions);
+    VkInstanceCreateInfo instanceInfo = {};
+    {
+        instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        instanceInfo.enabledExtensionCount = 0;
+        instanceInfo.flags = 0;
+        instanceInfo.pApplicationInfo = &appInfo;
+        instanceInfo.enabledLayerCount = (u32)mInstanceLayers.size();
+        instanceInfo.ppEnabledLayerNames = mInstanceLayers.data();
+        instanceInfo.enabledExtensionCount =
+            (u32)mInstanceExtensions.extensionNames.size();
+        instanceInfo.ppEnabledExtensionNames =
+            mInstanceExtensions.extensionNames.data();
+
+        if (mInstanceExtensions.debugUtils.has_value())
+        {
+            instanceInfo.pNext = &(*mInstanceExtensions.debugUtils);
+        }
+    }
+    vkThrowIfFailed(jnrCreateInstance(&instanceInfo, nullptr, &mInstance));
+
+    LoadFunctionsInstance(mInstance);
+
+    /* Also create the validation debug utils messenger */
+    if (mInstanceExtensions.debugUtils.has_value())
+    {
+        vkThrowIfFailed(jnrCreateDebugUtilsMessengerEXT(
+            mInstance, &(*mInstanceExtensions.debugUtils), nullptr,
+            &mDebugUtilsMessenger));
+    }
+}
+
+void Renderer::PickPhysicalDevice()
+{
+    u32 count = 0;
+    vkThrowIfFailed(jnrEnumeratePhysicalDevices(mInstance, &count, nullptr));
+    ThrowIfFailed(count > 0, "Could not find any vulkan-capable devices");
+
+    std::vector<VkPhysicalDevice> devices;
+    devices.resize(count);
+    vkThrowIfFailed(
+        jnrEnumeratePhysicalDevices(mInstance, &count, devices.data()));
+
+    bool found = false, foundIntegrated = false, foundCPU = false;
+    for (auto const &device : devices)
+    {
+        VkPhysicalDeviceProperties properties = {};
+        VkPhysicalDeviceFeatures features = {};
+
+        jnrGetPhysicalDeviceProperties(device, &properties);
+        jnrGetPhysicalDeviceFeatures(device, &features);
+
+        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+        {
+            SHOWINFO("Found discrete GPU with name: ", properties.deviceName);
+            mPhysicalDevice = device;
+            mPhysicalDeviceFeatures = features;
+            mPhysicalDeviceProperties = properties;
+            found = true;
+            break;
+        }
+
+        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+        {
+            SHOWINFO("Found integrated GPU with name: ", properties.deviceName);
+            mPhysicalDevice = device;
+            mPhysicalDeviceFeatures = features;
+            mPhysicalDeviceProperties = properties;
+            foundIntegrated = true;
+        }
+
+        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
+        {
+            SHOWINFO("Found CPU with name: ", properties.deviceName);
+            mPhysicalDevice = device;
+            mPhysicalDeviceFeatures = features;
+            mPhysicalDeviceProperties = properties;
+            foundCPU = true;
+        }
+    }
+    ThrowIfFailed(found || foundIntegrated || foundCPU,
+                  "Unable to find a GPU good enough");
+
+    PickQueueFamilyIndices();
+}
+
+void Renderer::PickQueueFamilyIndices()
+{
+    u32 count = 0;
+    jnrGetPhysicalDeviceQueueFamilyProperties(mPhysicalDevice, &count, nullptr);
+    ThrowIfFailed(count > 0, "Selected device doesn't have any queues");
+
+    std::vector<VkQueueFamilyProperties> queues;
+    queues.resize(count);
+    jnrGetPhysicalDeviceQueueFamilyProperties(mPhysicalDevice, &count,
+                                              queues.data());
+
+    for (u32 i = 0; i < queues.size(); ++i)
+    {
+        if (queues[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            mQueueIndices.graphicsFamily = i;
+        }
+
+        VkBool32 presentSupport = VK_FALSE;
+        vkThrowIfFailed(jnrGetPhysicalDeviceSurfaceSupportKHR(
+            mPhysicalDevice, i, mRenderingSurface, &presentSupport));
+
+        if (presentSupport)
+        {
+            mQueueIndices.presentFamily = i;
+        }
+
+        if (mQueueIndices.IsComplete())
+            break;
+    }
+
+    ThrowIfFailed(!mQueueIndices.IsEmpty(),
+                  "There should be at least one queue");
+}
+
+void Renderer::InitDevice(VulkanRendererInfo const &info)
+{
+    auto uniqueQueueIndices = mQueueIndices.GetUniqueFamilyIndices();
+
+    float priorities[] = {1.0f};
+    std::vector<VkDeviceQueueCreateInfo> queues = {};
+    queues.reserve(uniqueQueueIndices.size());
+    for (auto const &index : uniqueQueueIndices)
+    {
+        VkDeviceQueueCreateInfo queueInfo = {};
+        {
+            queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueInfo.queueFamilyIndex = index;
+            queueInfo.flags = 0;
+            queueInfo.queueCount = sizeof(priorities) / sizeof(priorities[0]);
+            queueInfo.pQueuePriorities = priorities;
+        }
+        queues.push_back(queueInfo);
+    }
+
+    mDeviceLayers = GetEnabledDeviceLayers(info.deviceLayers);
+    mDeviceExtensions = HandleEnabledDeviceExtensions(info.deviceExtensions);
+
+    VkDeviceCreateInfo deviceInfo = {};
+    {
+        deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        deviceInfo.queueCreateInfoCount = (u32)uniqueQueueIndices.size();
+        deviceInfo.pQueueCreateInfos = queues.data();
+        deviceInfo.queueCreateInfoCount = (u32)queues.size();
+        deviceInfo.pEnabledFeatures = &mPhysicalDeviceFeatures;
+        deviceInfo.enabledLayerCount = (u32)mDeviceLayers.size();
+        deviceInfo.ppEnabledLayerNames = mDeviceLayers.data();
+        deviceInfo.enabledExtensionCount =
+            (u32)mDeviceExtensions.extensionNames.size();
+        deviceInfo.ppEnabledExtensionNames =
+            mDeviceExtensions.extensionNames.data();
+
+        if (mDeviceExtensions.dynamicRendering.has_value())
+        {
+            deviceInfo.pNext = &(*mDeviceExtensions.dynamicRendering);
+        }
+    }
+
+    vkThrowIfFailed(
+        jnrCreateDevice(mPhysicalDevice, &deviceInfo, nullptr, &mDevice));
+
+    if (mQueueIndices.graphicsFamily.has_value())
+    {
+        jnrGetDeviceQueue(mDevice, mQueueIndices.graphicsFamily.value(), 0,
+                          &mGraphicsQueue);
+    }
+    if (mQueueIndices.presentFamily.has_value())
+    {
+        jnrGetDeviceQueue(mDevice, mQueueIndices.presentFamily.value(), 0,
+                          &mPresentQueue);
+    }
+
+    LoadFunctionsDevice(mDevice);
+}
+
+void Renderer::InitSurface()
+{
+    vkThrowIfFailed(glfwCreateWindowSurface(mInstance, mWindow, nullptr,
+                                            &mRenderingSurface));
+}
+
+void Renderer::InitSwapchain()
+{
+    mSwapchainDetails = GetSwapchainCapabilities();
+
+    auto presentMode = SelectBestPresentMode(mSwapchainDetails.presentModes);
+    auto surfaceFormat = SelectBestSurfaceFormat(mSwapchainDetails.formats);
+    auto extent = SelectSwapchainExtent(mSwapchainDetails.capabilities);
+
+    u32 imageCount = 0;
+    if (mSwapchainDetails.capabilities.maxImageCount == 0)
+    {
+        /* If the maxImageCount is 0 => there is no limit, so just stick to the
+         * default*/
+        imageCount = mSwapchainDetails.capabilities.minImageCount + 1;
+    }
+    else
+    {
+        imageCount =
+            Jnrlib::clamp(mSwapchainDetails.capabilities.minImageCount + 1,
+                          mSwapchainDetails.capabilities.minImageCount,
+                          mSwapchainDetails.capabilities.maxImageCount);
+    }
+    ThrowIfFailed(imageCount != 0,
+                  "For some reason, the vulkan driver specified that 0 images "
+                  "can be used for the swapchain");
+
+    std::vector<u32> familiesUsingBackbuffer = {*mQueueIndices.graphicsFamily,
+                                                *mQueueIndices.presentFamily};
+    std::sort(familiesUsingBackbuffer.begin(), familiesUsingBackbuffer.end());
+    familiesUsingBackbuffer.erase(std::unique(familiesUsingBackbuffer.begin(),
+                                              familiesUsingBackbuffer.end()),
+                                  familiesUsingBackbuffer.end());
+    ThrowIfFailed(familiesUsingBackbuffer.size() != 0,
+                  "Something weird happened and I don't have any families to "
+                  "use with the backbuffer");
+
+    VkSwapchainCreateInfoKHR swapchainInfo = {};
+    {
+        swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        swapchainInfo.surface = mRenderingSurface;
+        swapchainInfo.clipped = VK_TRUE;
+        swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        swapchainInfo.imageArrayLayers = 1;
+        swapchainInfo.imageColorSpace = surfaceFormat.colorSpace;
+        swapchainInfo.imageFormat = surfaceFormat.format;
+        swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        swapchainInfo.minImageCount = imageCount;
+        swapchainInfo.oldSwapchain = mSwapchain;
+        swapchainInfo.presentMode = presentMode;
+        swapchainInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+        swapchainInfo.imageExtent = extent;
+
+        swapchainInfo.imageSharingMode = familiesUsingBackbuffer.size() > 1
+                                             ? VK_SHARING_MODE_CONCURRENT
+                                             : VK_SHARING_MODE_EXCLUSIVE;
+        swapchainInfo.queueFamilyIndexCount =
+            (u32)familiesUsingBackbuffer.size();
+        swapchainInfo.pQueueFamilyIndices = familiesUsingBackbuffer.data();
+    }
+
+    vkThrowIfFailed(
+        jnrCreateSwapchainKHR(mDevice, &swapchainInfo, nullptr, &mSwapchain));
+
+    /* Save some swapchain info */
+    mSwapchainFormat = surfaceFormat.format;
+    mSwapchainExtent = extent;
+
+    {
+        /* Retrieve images */
+        u32 count = 0;
+        vkThrowIfFailed(
+            jnrGetSwapchainImagesKHR(mDevice, mSwapchain, &count, nullptr));
+
+        mSwapchainImages.resize(count);
+        vkThrowIfFailed(jnrGetSwapchainImagesKHR(mDevice, mSwapchain, &count,
+                                                 mSwapchainImages.data()));
+    }
+
+    {
+        /* Reset image layouts for images */
+        mSwapchainImageLayouts.resize(mSwapchainImages.size());
+        for (u32 i = 0; i < mSwapchainImages.size(); ++i)
+        {
+            mSwapchainImageLayouts[i] = VK_IMAGE_LAYOUT_UNDEFINED;
+        }
+    }
+
+    {
+        /* Destroy the old images */
+        for (auto const &view : mSwapchainImageViews)
+        {
+            jnrDestroyImageView(mDevice, view, nullptr);
+        }
+        /* Create views for images */
+        mSwapchainImageViews.resize(mSwapchainImages.size());
+
+        for (u32 i = 0; i < mSwapchainImages.size(); ++i)
+        {
+            VkImageViewCreateInfo viewInfo = {};
+            {
+                viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+                viewInfo.flags = 0;
+                viewInfo.components = {
+                    VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G,
+                    VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A};
+                viewInfo.format = surfaceFormat.format;
+                viewInfo.image = mSwapchainImages[i];
+                viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+                viewInfo.subresourceRange.levelCount = 1;
+                viewInfo.subresourceRange.baseMipLevel = 0;
+                viewInfo.subresourceRange.layerCount = 1;
+                viewInfo.subresourceRange.baseArrayLayer = 0;
+                viewInfo.subresourceRange.aspectMask =
+                    VK_IMAGE_ASPECT_COLOR_BIT;
+            }
+
+            vkThrowIfFailed(jnrCreateImageView(mDevice, &viewInfo, nullptr,
+                                               &mSwapchainImageViews[i]));
+        }
+    }
+}
+
+void Renderer::InitAllocator()
+{
+    VmaVulkanFunctions vulkanFunctions = {};
+    vulkanFunctions.vkGetInstanceProcAddr = jnrGetInstanceProcAddr;
+    vulkanFunctions.vkGetDeviceProcAddr = jnrGetDeviceProcAddr;
+
+    VmaAllocatorCreateInfo allocatorCreateInfo = {};
+    allocatorCreateInfo.vulkanApiVersion = API_VERSION;
+    allocatorCreateInfo.physicalDevice = mPhysicalDevice;
+    allocatorCreateInfo.device = mDevice;
+    allocatorCreateInfo.instance = mInstance;
+    allocatorCreateInfo.pVulkanFunctions = &vulkanFunctions;
+
+    vkThrowIfFailed(vmaCreateAllocator(&allocatorCreateInfo, &mAllocator));
+}
+
+Renderer::SwapchainSupportDetails Renderer::GetSwapchainCapabilities()
+{
+    SwapchainSupportDetails result;
+    {
+        VkSurfaceCapabilitiesKHR capabilities;
+        vkThrowIfFailed(jnrGetPhysicalDeviceSurfaceCapabilitiesKHR(
+            mPhysicalDevice, mRenderingSurface, &capabilities));
+
+        result.capabilities = std::move(capabilities);
+    }
+
+    {
+        u32 surfaceFormatCount = 0;
+        vkThrowIfFailed(jnrGetPhysicalDeviceSurfaceFormatsKHR(
+            mPhysicalDevice, mRenderingSurface, &surfaceFormatCount, nullptr));
+        ThrowIfFailed(
+            surfaceFormatCount != 0,
+            "The physical device has 0 surface formats. How is this possible?");
+
+        std::vector<VkSurfaceFormatKHR> surfaceFormats;
+        surfaceFormats.resize(surfaceFormatCount);
+        vkThrowIfFailed(jnrGetPhysicalDeviceSurfaceFormatsKHR(
+            mPhysicalDevice, mRenderingSurface, &surfaceFormatCount,
+            surfaceFormats.data()));
+
+        result.formats = std::move(surfaceFormats);
+    }
+
+    {
+        u32 presentCount = 0;
+        vkThrowIfFailed(jnrGetPhysicalDeviceSurfacePresentModesKHR(
+            mPhysicalDevice, mRenderingSurface, &presentCount, nullptr));
+        ThrowIfFailed(
+            presentCount != 0,
+            "The physical device has 0 present modes. How is this possible?");
+
+        std::vector<VkPresentModeKHR> presentModes;
+        presentModes.resize(presentCount);
+        vkThrowIfFailed(jnrGetPhysicalDeviceSurfacePresentModesKHR(
+            mPhysicalDevice, mRenderingSurface, &presentCount,
+            presentModes.data()));
+
+        result.presentModes = std::move(presentModes);
+    }
+
+    return result;
+}
+
+VkPresentModeKHR Renderer::SelectBestPresentMode(
+    std::vector<VkPresentModeKHR> const &presentModes)
+{
+    for (auto const &presentMode : presentModes)
+    {
+        if (presentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+            return presentMode;
+    }
+
+    // This is guaranteed to be present
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkSurfaceFormatKHR Renderer::SelectBestSurfaceFormat(
+    std::vector<VkSurfaceFormatKHR> const &formats)
+{
+    for (auto const &format : formats)
+    {
+        if (format.format == VK_FORMAT_R8G8B8A8_SRGB &&
+            format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        {
+            return format;
+        }
+    }
+
+    return formats[0];
+}
+
+VkExtent2D Renderer::SelectSwapchainExtent(
+    VkSurfaceCapabilitiesKHR const &capabilities)
+{
+#undef max
+    if (capabilities.currentExtent.width != std::numeric_limits<u32>::max())
+    {
+        return capabilities.currentExtent;
+    }
+    else
+    {
+        i32 width, height;
+        glfwGetFramebufferSize(mWindow, &width, &height);
+
+        VkExtent2D actualExtent = {static_cast<u32>(width),
+                                   static_cast<u32>(height)};
+
+        actualExtent.width =
+            std::clamp(actualExtent.width, capabilities.minImageExtent.width,
+                       capabilities.maxImageExtent.width);
+        actualExtent.height =
+            std::clamp(actualExtent.height, capabilities.minImageExtent.height,
+                       capabilities.maxImageExtent.height);
+
+        return actualExtent;
+    }
+}
+
+std::vector<const char *> Renderer::GetEnabledInstanceLayers(
+    decltype(VulkanRendererInfo::instanceLayers) const &expectedLayers)
+{
+    u32 numLayers = 0;
+    std::vector<VkLayerProperties> layers;
+    vkThrowIfFailed(jnrEnumerateInstanceLayerProperties(&numLayers, nullptr));
+
+    layers.resize(numLayers);
+    vkThrowIfFailed(
+        jnrEnumerateInstanceLayerProperties(&numLayers, &layers[0]));
+
+    std::vector<const char *> enabledLayers;
+    enabledLayers.reserve(expectedLayers.size());
+    for (auto const &expectedLayer : expectedLayers)
+    {
+        bool found = false;
+
+        for (auto const &layer : layers)
+        {
+            if (Jnrlib::iequals(layer.layerName, expectedLayer.name.c_str()))
+            {
+                enabledLayers.push_back(expectedLayer.name.c_str());
+                found = true;
+                break;
+            }
+        }
+
+        if (expectedLayer.mandatory)
+        {
+            ThrowIfFailed(found, "Could not find mandatory layer ",
+                          expectedLayer.name);
+        }
+        else
+        {
+            if (!found)
+            {
+                SHOWWARNING("Unable to find layer ", expectedLayer.name);
+            }
+        }
+    }
+
+    return enabledLayers;
+}
+
+Renderer::ExtensionsOutput Renderer::HandleEnabledInstanceExtensions(
+    decltype(VulkanRendererInfo::instanceExtensions) const &expectedExtensions)
+{
+    ExtensionsOutput extensions;
+
+    std::vector<const char *> enabledLayers =
+        mInstanceLayers; // Copy the existing layers
+    enabledLayers.push_back(
+        nullptr); // and prepend the nullptr, to get layer-less extensions
+    std::vector<VkExtensionProperties> properties;
+    for (auto const &layer : enabledLayers)
+    {
+        u32 count = 0;
+        jnrEnumerateInstanceExtensionProperties(layer, &count, nullptr);
+
+        std::vector<VkExtensionProperties> layerProperties;
+        layerProperties.resize(count);
+        jnrEnumerateInstanceExtensionProperties(layer, &count,
+                                                layerProperties.data());
+        std::move(layerProperties.begin(), layerProperties.end(),
+                  std::back_inserter(properties));
+    }
+
+    for (const auto &it : expectedExtensions)
+    {
+        bool found =
+            std::find_if(properties.begin(), properties.end(),
+                         [&](VkExtensionProperties const &properties) {
+                             return Jnrlib::iequals(it.name.c_str(),
+                                                    properties.extensionName);
+                         }) != properties.end();
+
+        if (it.mandatory)
+        {
+            ThrowIfFailed(found, "Could not find mandatory extension ",
+                          it.name);
+        }
+        else
+        {
+            if (!found)
+            {
+                SHOWWARNING("Unable to find extension ", it.name);
+            }
+        }
+
+        if (strcmp(it.name.c_str(), VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0)
+        {
+            VkDebugUtilsMessengerCreateInfoEXT debugUtils = {};
+            debugUtils.sType =
+                VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+            debugUtils.messageSeverity =
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+            debugUtils.messageType =
+                VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+            debugUtils.pfnUserCallback = debugCallback;
+
+            extensions.debugUtils = debugUtils;
+        }
+
+        extensions.extensionNames.push_back(it.name.c_str());
+    }
+    return extensions;
+}
+
+std::vector<const char *> Renderer::GetEnabledDeviceLayers(
+    decltype(VulkanRendererInfo::instanceLayers) const &expectedLayers)
+{
+    u32 numLayers = 0;
+    std::vector<VkLayerProperties> layers;
+    vkThrowIfFailed(jnrEnumerateDeviceLayerProperties(mPhysicalDevice,
+                                                      &numLayers, nullptr));
+
+    layers.resize(numLayers);
+    vkThrowIfFailed(jnrEnumerateDeviceLayerProperties(mPhysicalDevice,
+                                                      &numLayers, &layers[0]));
+
+    std::vector<const char *> enabledLayers;
+    enabledLayers.reserve(expectedLayers.size());
+    for (auto const &expectedLayer : expectedLayers)
+    {
+        bool found = false;
+
+        for (auto const &layer : layers)
+        {
+            if (Jnrlib::iequals(layer.layerName, expectedLayer.name.c_str()))
+            {
+                enabledLayers.push_back(expectedLayer.name.c_str());
+                found = true;
+                break;
+            }
+        }
+
+        if (expectedLayer.mandatory)
+        {
+            ThrowIfFailed(found, "Could not find mandatory layer ",
+                          expectedLayer.name);
+        }
+        else
+        {
+            if (!found)
+            {
+                SHOWWARNING("Unable to find layer ", expectedLayer.name);
+            }
+        }
+    }
+
+    return enabledLayers;
+}
+
+Renderer::ExtensionsOutput Renderer::HandleEnabledDeviceExtensions(
+    decltype(VulkanRendererInfo::instanceExtensions) const &expectedExtensions)
+{
+    ExtensionsOutput extensions;
+
+    std::vector<const char *> enabledLayers =
+        mDeviceLayers; // Copy the existing layers
+    enabledLayers.push_back(
+        nullptr); // and prepend the nullptr, to get layer-less extensions
+    std::vector<VkExtensionProperties> properties;
+    for (auto const &layer : enabledLayers)
+    {
+        u32 count = 0;
+        jnrEnumerateDeviceExtensionProperties(mPhysicalDevice, layer, &count,
+                                              nullptr);
+
+        std::vector<VkExtensionProperties> layerProperties;
+        layerProperties.resize(count);
+        jnrEnumerateDeviceExtensionProperties(mPhysicalDevice, layer, &count,
+                                              layerProperties.data());
+        std::move(layerProperties.begin(), layerProperties.end(),
+                  std::back_inserter(properties));
+    }
+
+    for (const auto &it : expectedExtensions)
+    {
+        bool found =
+            std::find_if(properties.begin(), properties.end(),
+                         [&](VkExtensionProperties const &properties) {
+                             return Jnrlib::iequals(it.name.c_str(),
+                                                    properties.extensionName);
+                         }) != properties.end();
+
+        if (it.mandatory)
+        {
+            ThrowIfFailed(found, "Could not find mandatory extension ",
+                          it.name);
+        }
+        else
+        {
+            if (!found)
+            {
+                SHOWWARNING("Unable to find extension ", it.name);
+            }
+        }
+
+        if (found && strcmp(it.name.c_str(),
+                            VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME) == 0)
+        {
+            VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicRendering{};
+            dynamicRendering.sType =
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
+            dynamicRendering.dynamicRendering = VK_TRUE;
+
+            extensions.dynamicRendering = dynamicRendering;
+            mSupportsDynamicRendering = true;
+        }
+
+        if (found)
+        {
+            extensions.extensionNames.push_back(it.name.c_str());
+        }
+    }
+
+    return extensions;
+}
+
+VkPipelineLayout Renderer::GetEmptyPipelineLayout()
+{
+    if (mEmptyPipelineLayout != VK_NULL_HANDLE)
+        return mEmptyPipelineLayout;
+
+    VkPipelineLayoutCreateInfo layoutInfo = {};
+    {
+        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        layoutInfo.setLayoutCount = 0;
+        layoutInfo.pushConstantRangeCount = 0;
+        layoutInfo.flags = 0;
+    }
+
+    vkThrowIfFailed(jnrCreatePipelineLayout(mDevice, &layoutInfo, nullptr,
+                                            &mEmptyPipelineLayout));
+
+    return mEmptyPipelineLayout;
+}
+
+VkSampler Renderer::GetPointSampler()
+{
+    if (mPointSampler != VK_NULL_HANDLE)
+        return mPointSampler;
+
+    VkSamplerCreateInfo samplerInfo = {};
+    {
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 16.f;
+        samplerInfo.minFilter = VK_FILTER_NEAREST;
+        samplerInfo.magFilter = VK_FILTER_NEAREST;
+        samplerInfo.maxLod = 0.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        samplerInfo.unnormalizedCoordinates = VK_TRUE;
+    }
+    vkThrowIfFailed(
+        jnrCreateSampler(mDevice, &samplerInfo, nullptr, &mPointSampler));
+
+    return mPointSampler;
+}
+
+VkSampler Renderer::GetFontSampler()
+{
+    if (mFontSampler != VK_NULL_HANDLE)
+        return mFontSampler;
+
+    VkSamplerCreateInfo samplerInfo = {};
+    {
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.maxLod = 1000.0f;
+        samplerInfo.minLod = -1000.0f;
+        samplerInfo.maxAnisotropy = 1.f;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    }
+    vkThrowIfFailed(
+        jnrCreateSampler(mDevice, &samplerInfo, nullptr, &mFontSampler));
+
+    return mFontSampler;
+}
+
+VkPipelineCache Vulkan::Renderer::GetPipelineCache()
+{
+    if (mPipelineCache != VK_NULL_HANDLE)
+        return mPipelineCache;
+
+    /* Read the pipeline cache */
+    auto bytes = Jnrlib::ReadWholeFile(PIPELINES_CACHE_FILE, false);
+
+    VkPipelineCacheCreateInfo cacheInfo{};
+    {
+        cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+        cacheInfo.flags = 0;
+        cacheInfo.initialDataSize = 0;
+        cacheInfo.pInitialData = nullptr;
+    }
+    if (bytes.size() > 0)
+    {
+        cacheInfo.initialDataSize = bytes.size();
+        cacheInfo.pInitialData = bytes.data();
+    }
+
+    vkThrowIfFailed(
+        jnrCreatePipelineCache(mDevice, &cacheInfo, nullptr, &mPipelineCache));
+
+    return mPipelineCache;
+}
+
+VmaAllocator Renderer::GetAllocator()
+{
+    return mAllocator;
+}
+
+VkFormat Renderer::GetBackbufferFormat()
+{
+    return mSwapchainFormat;
+}
+
+VkFormat Renderer::GetDefaultStencilFormat()
+{
+    return VK_FORMAT_UNDEFINED;
+}
+
+VkFormat Renderer::GetDefaultDepthFormat()
+{
+    return VK_FORMAT_UNDEFINED;
+}
+
+VkExtent2D Renderer::GetBackbufferExtent()
+{
+    return mSwapchainExtent;
+}
+
+u32 Renderer::AcquireNextImage(GPUSynchronizationObject *syncObject)
+{
+    u32 imageIndex = 0;
+    vkThrowIfFailed(jnrAcquireNextImageKHR(mDevice, mSwapchain, UINT64_MAX,
+                                           syncObject->GetSemaphore(),
+                                           VK_NULL_HANDLE, &imageIndex));
+    return imageIndex;
+}
+
+VkImageView Renderer::GetSwapchainImageView(u32 index)
+{
+    ThrowIfFailed(index >= 0 && index < mSwapchainImageViews.size(),
+                  "Invalid image view requested");
+    return mSwapchainImageViews[index];
+}
+
+u32 Renderer::GetSwapchainImageCount()
+{
+    return mSwapchainImageViews.size();
+}
