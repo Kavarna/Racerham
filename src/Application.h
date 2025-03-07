@@ -1,11 +1,11 @@
 #pragma once
 
 #include "GLFW/glfw3.h"
+#include "Renderer/Vulkan/Buffer.h"
+#include "Renderer/Vulkan/CommandList.h"
+#include "Renderer/Vulkan/Pipeline.h"
 #include "Renderer/Vulkan/Renderer.h"
-#include "src/Renderer/Vulkan/Buffer.h"
-#include "src/Renderer/Vulkan/CommandList.h"
-#include "src/Renderer/Vulkan/Pipeline.h"
-#include "src/Renderer/Vulkan/SynchronizationObjects.h"
+#include "Renderer/Vulkan/SynchronizationObjects.h"
 #include <Jnrlib/Singletone.h>
 
 #include "LinearMath/btVector3.h"

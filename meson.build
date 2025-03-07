@@ -1,7 +1,6 @@
 project('RacerHam', 'cpp', version: '0.1.0', default_options: ['cpp_std=c++20'])
 
 buildtype = get_option('buildtype')
-
 if buildtype == 'debug'
   add_project_arguments('-DDEBUG', language: 'cpp')
 else
@@ -86,16 +85,21 @@ endforeach
 
 # ~~~~ Utility scripts ~~~~
 
+if buildtype == 'debug'
 
-reinstall_script = configure_file(
-    input: 'scripts/reinstall.sh.in',
-    output: 'reinstall.sh',
-    configuration: {
-        'project_name': 'reinstall_script',
-        'build_dir': meson.build_root(),
-    },
-)
+  if system != 'windows'
 
-install_data(reinstall_script, install_dir: bin_directory, install_mode: 'rwxr-xr-x')
+    # Bash scripts that are useful for debugging
+    reinstall_script = configure_file(
+      input: 'scripts/reinstall.sh.in',
+      output: 'reinstall.sh',
+      configuration: {
+          'project_name': 'reinstall_script',
+          'build_dir': meson.build_root(),
+      },
+    )
 
+    install_data(reinstall_script, install_dir: bin_directory, install_mode: 'rwxr-xr-x')
+  endif
 
+endif
