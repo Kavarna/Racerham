@@ -1,4 +1,4 @@
-project('RacerHam', 'cpp', version: '0.1.0', default_options: ['cpp_std=c++23'])
+project('RacerHam', 'cpp', version: '0.1.0', default_options: ['cpp_std=c++20'])
 
 buildtype = get_option('buildtype')
 
@@ -16,9 +16,11 @@ endif
 add_global_arguments('-DVK_NO_PROTOTYPES', language: ['c', 'cpp'])
 
 
+bullet_physics = dependency('bullet')
 vulkan_headers = dependency('vulkan-headers')
 glfw = dependency('glfw3')
 memory_allocator = dependency('vulkan-memory-allocator')
+glm = dependency('glm')
 
 
 common_include_directories = ['Jnrlib']
@@ -53,11 +55,34 @@ executable(
   sources: game_srcs,
   include_directories: client_include_directories,
   link_with: jnrlib,
-  dependencies: [glfw, memory_allocator],
+  dependencies: [glfw, memory_allocator, bullet_physics, glm],
   install: true,
   install_dir: bin_directory
 )
 
+# ~~~~ Shaders ~~~~
+shaders = [
+  'src/Renderer/Vulkan/Shaders/basic.vert',
+  'src/Renderer/Vulkan/Shaders/basic.frag'
+]
+
+shaders_directory = bin_directory / 'Shaders'
+
+foreach shader_file : shaders
+
+  filename = shader_file.split('/')[-1]
+  output_file = filename + '.spv'
+
+  custom_target(
+    filename,
+    output: output_file,
+    input: shader_file,
+    command: ['glslangValidator', '-V', '@INPUT@', '-o', '@OUTPUT@'],
+    install: true,
+    install_dir: shaders_directory
+  )
+
+endforeach
 
 # ~~~~ Utility scripts ~~~~
 
