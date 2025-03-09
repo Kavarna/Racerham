@@ -14,15 +14,14 @@ endif
 
 add_global_arguments('-DVK_NO_PROTOTYPES', language: ['c', 'cpp'])
 
-
 bullet_physics = dependency('bullet')
 vulkan_headers = dependency('vulkan-headers')
 glfw = dependency('glfw3')
 memory_allocator = dependency('vulkan-memory-allocator')
 glm = dependency('glm')
+entt = dependency('entt')
 
-
-common_include_directories = ['Jnrlib']
+common_include_directories = ['Jnrlib', 'src']
 client_include_directories = [common_include_directories]
 
 jnrlib_srcs = [
@@ -30,8 +29,12 @@ jnrlib_srcs = [
 ]
 
 game_srcs = [
-  'src/main.cpp',
   'src/Application.cpp',
+  'src/Gameplay/Entity.cpp',
+  'src/Gameplay/World.cpp',
+  'src/Gameplay/Camera.cpp',
+  'src/Gameplay/Systems/Physics.cpp',
+  'src/main.cpp',
   'src/Renderer/Vulkan/CommandList.cpp',
   'src/Renderer/Vulkan/Image.cpp',
   'src/Renderer/Vulkan/LayoutTracker.cpp',
@@ -54,15 +57,15 @@ executable(
   sources: game_srcs,
   include_directories: client_include_directories,
   link_with: jnrlib,
-  dependencies: [glfw, memory_allocator, bullet_physics, glm],
+  dependencies: [glfw, vulkan_headers, memory_allocator, bullet_physics, glm, entt],
   install: true,
-  install_dir: bin_directory
+  install_dir: bin_directory,
 )
 
 # ~~~~ Shaders ~~~~
 shaders = [
   'src/Renderer/Vulkan/Shaders/basic.vert',
-  'src/Renderer/Vulkan/Shaders/basic.frag'
+  'src/Renderer/Vulkan/Shaders/basic.frag',
 ]
 
 shaders_directory = bin_directory / 'Shaders'
@@ -78,7 +81,7 @@ foreach shader_file : shaders
     input: shader_file,
     command: ['glslangValidator', '-V', '@INPUT@', '-o', '@OUTPUT@'],
     install: true,
-    install_dir: shaders_directory
+    install_dir: shaders_directory,
   )
 
 endforeach
@@ -94,8 +97,8 @@ if buildtype == 'debug'
       input: 'scripts/reinstall.sh.in',
       output: 'reinstall.sh',
       configuration: {
-          'project_name': 'reinstall_script',
-          'build_dir': meson.build_root(),
+        'project_name': 'reinstall_script',
+        'build_dir': meson.build_root(),
       },
     )
 

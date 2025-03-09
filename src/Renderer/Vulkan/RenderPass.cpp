@@ -131,7 +131,7 @@ void RenderPass::Bake()
     auto device = renderer->GetDevice();
     std::vector<VkSubpassDescription> subpassDescriptions;
 
-    for (uint32_t i = 0; i < mSubpassCount; ++i)
+    for (u32 i = 0; i < mSubpassCount; ++i)
     {
         VkSubpassDescription subpassDescription = {};
         subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;

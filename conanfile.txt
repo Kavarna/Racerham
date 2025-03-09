@@ -4,6 +4,7 @@ glfw/3.4
 vulkan-memory-allocator/3.0.1
 bullet3/3.25
 glm/1.0.1
+entt/3.14.0
 
 [generators]
 PkgConfigDeps

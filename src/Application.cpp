@@ -1,17 +1,28 @@
 #include "Application.h"
 
+#include "Check.h"
+#include "Gameplay/Camera.h"
 #include "Renderer/Vulkan/CommandList.h"
 #include "Renderer/Vulkan/Pipeline.h"
 #include "Renderer/Vulkan/Renderer.h"
+#include "Renderer/Vulkan/RootSignature.h"
 #include "Renderer/Vulkan/SynchronizationObjects.h"
 
-#include "Renderer/Vertex.h"
+#include "Utils/Vertex.h"
 
 #include "GLFW/glfw3.h"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/scalar_constants.hpp"
+#include "glm/fwd.hpp"
 #include "vulkan/vulkan_core.h"
 
-#include <cmath>
 #include <memory>
+
+/* Redirects for callbacks */
+void OnResizeCallback(GLFWwindow *window, int width, int height)
+{
+    Application::Get()->OnResize(width, height);
+}
 
 Application::Application() : mWidth(1280), mHeight(720)
 {
@@ -19,6 +30,7 @@ Application::Application() : mWidth(1280), mHeight(720)
     Vulkan::Renderer::Get(GetRendererCreateInfo());
     InitPerFrameResources();
     InitResources();
+    SetMouseInputMode(false);
 }
 
 Application::~Application()
@@ -35,8 +47,7 @@ void Application::InitWindow()
     ThrowIfFailed(mWindow != nullptr, "Unable to create window");
 
     glfwMakeContextCurrent(mWindow);
-    // glfwSetWindowSizeCallback(mWindow, OnResizeCallback);
-    // glfwSetWindowMaximizeCallback(mWindow, OnMaximizeCallback);
+    glfwSetWindowSizeCallback(mWindow, OnResizeCallback);
 
     DSHOWINFO("Successfully created window");
 }
@@ -77,7 +88,7 @@ Vulkan::VulkanRendererInfo Application::GetRendererCreateInfo()
 
 void Application::InitPerFrameResources()
 {
-    for (u32 i = 0; i < MAX_IN_FLIGHT_FRAMES; ++i)
+    for (u32 i = 0; i < Constants::MAX_IN_FLIGHT_FRAMES; ++i)
     {
         mPerFrameResources[i].commandList =
             std::make_unique<Vulkan::CommandList>(
@@ -85,11 +96,18 @@ void Application::InitPerFrameResources()
         mPerFrameResources[i].commandList->Init();
         mPerFrameResources[i].isCommandListDone =
             std::make_unique<Vulkan::CPUSynchronizationObject>(true);
+        mPerFrameResources[i].cameraBuffer = std::make_unique<Vulkan::Buffer>(
+            sizeof(glm::mat4x4), 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
     }
 }
 
 void Application::InitResources()
 {
+    /* Create simple camera */
+    mCamera = Camera(glm::vec3(0.0f, 0.0f, -5.0f), (f32)mWidth, (f32)mHeight,
+                     glm::pi<float>() / 4);
+
     /* Create vertex buffer */
     float vertices[] = {0.0f, 1.0f, 0.0f,  -1.0f, -1.0f,
                         0.0f, 1.0f, -1.0f, 0.0f};
@@ -98,6 +116,30 @@ void Application::InitResources()
         sizeof(float) * 3, 3, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
     mVertexBuffer->Copy(vertices);
+
+    /* Create a simple root signature*/
+    mDescriptorSet = std::make_unique<Vulkan::DescriptorSet>();
+    {
+        mDescriptorSet->AddStorageBuffer(0, 1);
+        mDescriptorSet->AddInputBuffer(1, 1);
+        mDescriptorSet->Bake();
+    }
+    mRootSignature = std::make_unique<Vulkan::RootSignature>();
+    {
+        mRootSignature->AddPushRange<u32>(0, 1);
+        mRootSignature->AddDescriptorSet(mDescriptorSet.get());
+    }
+    mRootSignature->Bake();
+
+    mWorldBuffer = std::make_unique<Vulkan::Buffer>(
+        sizeof(glm::mat4x4), 1, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+    auto identityMatrix = glm::identity<glm::mat4x4>();
+    mWorldBuffer->Copy(&identityMatrix);
+
+    mDescriptorSet->BindStorageBuffer(mWorldBuffer.get(), 0);
+    mDescriptorSet->BindInputBuffer(mPerFrameResources[0].cameraBuffer.get(),
+                                    1);
 
     /* Create simple pipeline */
     VkViewport viewport = {};
@@ -117,6 +159,7 @@ void Application::InitResources()
 
     mSimplePipeline = std::make_unique<Vulkan::Pipeline>("SimplePipeline");
     {
+        mSimplePipeline->SetRootSignature(mRootSignature.get());
         mSimplePipeline->AddShader("Shaders/basic.vert.spv");
         mSimplePipeline->AddShader("Shaders/basic.frag.spv");
     }
@@ -126,6 +169,11 @@ void Application::InitResources()
         viewportState.pViewports = &viewport;
         viewportState.scissorCount = 1;
         viewportState.pScissors = &scissor;
+    }
+    {
+        auto &rasterizationState =
+            mSimplePipeline->GetRasterizationStateCreateInfo();
+        rasterizationState.cullMode = VkCullModeFlagBits::VK_CULL_MODE_NONE;
     }
     VkPipelineColorBlendAttachmentState attachmentInfo{};
     {
@@ -145,11 +193,11 @@ void Application::InitResources()
     {
         auto &vertexInput = mSimplePipeline->GetVertexInputStateCreateInfo();
         vertexInput.vertexAttributeDescriptionCount =
-            (uint32_t)vertexPositionAttributeDescription.size();
+            (u32)vertexPositionAttributeDescription.size();
         vertexInput.pVertexAttributeDescriptions =
             vertexPositionAttributeDescription.data();
         vertexInput.vertexBindingDescriptionCount =
-            (uint32_t)vertexPositionBindingDescription.size();
+            (u32)vertexPositionBindingDescription.size();
         vertexInput.pVertexBindingDescriptions =
             vertexPositionBindingDescription.data();
     }
@@ -161,6 +209,46 @@ void Application::Frame()
 {
     auto &cmdList = mPerFrameResources[mCurrentFrame].commandList;
     auto &isCmdListDone = mPerFrameResources[mCurrentFrame].isCommandListDone;
+    auto &cameraBuffer = mPerFrameResources[mCurrentFrame].cameraBuffer;
+    /* Update the camera */
+    mCamera.Update();
+
+    if (IsKeyPressed(GLFW_KEY_ESCAPE))
+    {
+        glfwSetWindowShouldClose(mWindow, 1);
+    }
+
+    if (IsKeyPressed(GLFW_KEY_W) || IsKeyPressed(GLFW_KEY_UP))
+    {
+        mCamera.MoveForward(0.0016f);
+    }
+    if (IsKeyPressed(GLFW_KEY_S) || IsKeyPressed(GLFW_KEY_DOWN))
+    {
+        mCamera.MoveBackward(0.0016f);
+    }
+    if (IsKeyPressed(GLFW_KEY_A) || IsKeyPressed(GLFW_KEY_LEFT))
+    {
+        mCamera.StrafeLeft(0.0016f);
+    }
+    if (IsKeyPressed(GLFW_KEY_D) || IsKeyPressed(GLFW_KEY_RIGHT))
+    {
+        mCamera.StrafeRight(0.0016f);
+    }
+
+    static glm::vec2 mLastMousePosition = GetMousePosition();
+    auto mousePosition = GetMousePosition();
+    auto mouseMovement = mousePosition - mLastMousePosition;
+    if (mouseMovement != glm::vec2{0.0f, 0.0f})
+    {
+        mouseMovement /= GetWindowDimensions();
+        mCamera.Pitch(mouseMovement.y);
+        mCamera.Yaw(mouseMovement.x);
+        mLastMousePosition = mousePosition;
+    }
+
+    auto viewProjectionMatrix = mCamera.GetProjection() * mCamera.GetView();
+    // auto viewProjectionMatrix = glm::identity<glm::mat4x4>();
+    cameraBuffer->Copy(&viewProjectionMatrix);
 
     isCmdListDone->Wait();
     isCmdListDone->Reset();
@@ -174,6 +262,10 @@ void Application::Frame()
         {
             cmdList->BindVertexBuffer(mVertexBuffer.get(), 0);
             cmdList->BindPipeline(mSimplePipeline.get());
+            cmdList->BindDescriptorSet(mDescriptorSet.get(), 0,
+                                       mRootSignature.get());
+            u32 index = 0;
+            cmdList->BindPushRange<u32>(mRootSignature.get(), 0, 1, &index);
             cmdList->Draw(3, 0);
         }
 
@@ -184,7 +276,66 @@ void Application::Frame()
 
     cmdList->SubmitToScreen(isCmdListDone.get());
 
-    mCurrentFrame = (mCurrentFrame + 1) % MAX_IN_FLIGHT_FRAMES;
+    mCurrentFrame = (mCurrentFrame + 1) % Constants::MAX_IN_FLIGHT_FRAMES;
+}
+
+void Application::OnResize(uint32_t width, uint32_t height)
+{
+    if (width < 5 || height < 5)
+    {
+        SHOWINFO(
+            "The window is too small for a resize. Skipping resize callback");
+        mMinimized = true;
+        return;
+    }
+    mMinimized = false;
+
+    mWidth = width;
+    mHeight = height;
+
+    Vulkan::Renderer::Get()->WaitIdle();
+    Vulkan::Renderer::Get()->OnResize();
+}
+
+bool Application::IsKeyPressed(int keyCode)
+{
+    return glfwGetKey(mWindow, keyCode) == GLFW_PRESS;
+}
+
+bool Application::IsMousePressed(int keyCode)
+{
+    return glfwGetMouseButton(mWindow, keyCode) == GLFW_PRESS;
+}
+
+void Application::SetMouseInputMode(bool enable)
+{
+    if (enable)
+    {
+        glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    }
+    else
+    {
+        glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        if (glfwRawMouseMotionSupported())
+            glfwSetInputMode(mWindow, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+    }
+}
+
+bool Application::IsMouseEnabled()
+{
+    return glfwGetInputMode(mWindow, GLFW_CURSOR) == GLFW_CURSOR_NORMAL;
+}
+
+glm::vec2 Application::GetMousePosition()
+{
+    double xpos = 0.0, ypos = 0.0;
+    glfwGetCursorPos(mWindow, &xpos, &ypos);
+    return {xpos, ypos};
+}
+
+glm::vec2 Application::GetWindowDimensions()
+{
+    return glm::vec2{mWidth, mHeight};
 }
 
 void Application::Run()
@@ -199,10 +350,11 @@ void Application::Run()
 
 void Application::DestroyFrameResources()
 {
-    for (u32 i = 0; i < MAX_IN_FLIGHT_FRAMES; ++i)
+    for (u32 i = 0; i < Constants::MAX_IN_FLIGHT_FRAMES; ++i)
     {
         mPerFrameResources[i].commandList.reset();
         mPerFrameResources[i].isCommandListDone.reset();
+        mPerFrameResources[i].cameraBuffer.reset();
     }
 }
 
@@ -212,6 +364,9 @@ void Application::Destroy()
     renderer->WaitIdle();
 
     DestroyFrameResources();
+    mWorldBuffer.reset();
+    mDescriptorSet.reset();
+    mRootSignature.reset();
     mSimplePipeline.reset();
     mVertexBuffer.reset();
 
