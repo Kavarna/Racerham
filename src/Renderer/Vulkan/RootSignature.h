@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Buffer.h"
+#include "Check.h"
+#include "vulkan/vulkan_core.h"
 #include <vector>
 #include <vulkan/vulkan.h>
 
@@ -25,21 +27,38 @@ public:
     void AddSampler(u32 binding, std::vector<VkSampler> const &samplers,
                     VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
 
-    void AddCombinedImageSampler(u32 binding, VkSampler *sampler, VkShaderStageFlags stages);
-    void BindCombinedImageSampler(u32 binding, Vulkan::Image *image, VkImageAspectFlags aspectFlags, VkSampler sampler,
-                                  u32 instance = 0);
-    void BindCombinedImageSampler(u32 binding, Vulkan::ImageView image, VkImageAspectFlags aspectFlags,
-                                  VkSampler sampler, u32 instance = 0);
+    void AddCombinedImageSampler(
+        u32 binding, VkSampler *sampler,
+        VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
+    void BindCombinedImageSampler(u32 binding, Vulkan::Image *image,
+                                  VkImageAspectFlags aspectFlags,
+                                  VkSampler sampler);
+    void BindCombinedImageSampler(u32 binding, Vulkan::ImageView image,
+                                  VkImageAspectFlags aspectFlags,
+                                  VkSampler sampler);
 
-    void AddStorageBuffer(u32 binding, u32 descriptorCount, VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
-    void BindStorageBuffer(Vulkan::Buffer *buffer, u32 binding, u32 elementIndex = 0, u32 instance = 0);
+    void AddStorageBuffer(u32 binding, u32 descriptorCount,
+                          VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
+    void BindStorageBuffer(Vulkan::Buffer *buffer, u32 binding,
+                           u32 elementIndex = 0);
 
-    void AddInputBuffer(u32 binding, u32 descriptorCount, VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
-    void BindInputBuffer(Vulkan::Buffer *buffer, u32 binding, u32 elementIndex = 0, u32 instance = 0);
+    void AddInputBuffer(u32 binding, u32 descriptorCount,
+                        VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
+    void BindInputBuffer(Vulkan::Buffer *buffer, u32 binding,
+                         u32 elementIndex = 0);
 
     void BakeLayout();
     /* Bake multiple instances */
     void Bake(u32 instances = 1);
+
+    void SetActiveInstance(u32 activeInstance)
+    {
+        CHECK_FATAL(activeInstance < mPoolInfo.maxSets, activeInstance,
+                    " is bigger than ", mPoolInfo.maxSets,
+                    " which is the maximum number of instances");
+
+        mActiveInstance = activeInstance;
+    }
 
 private:
     VkDescriptorSetLayoutCreateInfo mLayoutInfo{};
@@ -49,6 +68,8 @@ private:
     u32 mStorageBufferCount = 0;
     u32 mSamplerCount = 0;
     u32 mCombinedImageSamplerCount = 0;
+
+    u32 mActiveInstance = 0;
 
     std::vector<VkDescriptorSetLayoutBinding> mBindings;
     VkDescriptorSetLayout mLayout = VK_NULL_HANDLE;
@@ -69,7 +90,9 @@ public:
     /* TODO: Should make this non-copyable */
 
 public:
-    template <typename T> void AddPushRange(u32 offset, u32 count = 1, VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
+    template <typename T>
+    void AddPushRange(u32 offset, u32 count = 1,
+                      VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
     void AddDescriptorSet(DescriptorSet *descriptorSet);
 
     void Bake();
@@ -83,7 +106,9 @@ private:
 
 } // namespace Vulkan
 
-template <typename T> inline void Vulkan::RootSignature::AddPushRange(u32 offset, u32 count, VkShaderStageFlags stages)
+template <typename T>
+inline void Vulkan::RootSignature::AddPushRange(u32 offset, u32 count,
+                                                VkShaderStageFlags stages)
 {
     VkPushConstantRange pushRange{};
     {

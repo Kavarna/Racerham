@@ -95,14 +95,14 @@ void DescriptorSet::AddCombinedImageSampler(u32 binding, VkSampler *sampler, VkS
 }
 
 void DescriptorSet::BindCombinedImageSampler(u32 binding, Vulkan::Image *image, VkImageAspectFlags aspectFlags,
-                                             VkSampler sampler, u32 instance)
+                                             VkSampler sampler)
 {
     auto imageView = image->GetImageView(aspectFlags);
-    BindCombinedImageSampler(binding, imageView, aspectFlags, sampler, instance);
+    BindCombinedImageSampler(binding, imageView, aspectFlags, sampler);
 }
 
 void DescriptorSet::BindCombinedImageSampler(u32 binding, Vulkan::ImageView image, VkImageAspectFlags aspectFlags,
-                                             VkSampler sampler, u32 instance)
+                                             VkSampler sampler)
 {
     auto device = Renderer::Get()->GetDevice();
     VkDescriptorImageInfo imageInfo{};
@@ -118,7 +118,7 @@ void DescriptorSet::BindCombinedImageSampler(u32 binding, Vulkan::ImageView imag
         writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         writeDescriptorSet.dstArrayElement = 0;
         writeDescriptorSet.dstBinding = binding;
-        writeDescriptorSet.dstSet = mDescriptorSets[instance];
+        writeDescriptorSet.dstSet = mDescriptorSets[mActiveInstance];
         writeDescriptorSet.pImageInfo = &imageInfo;
     }
     jnrUpdateDescriptorSets(device, 1, &writeDescriptorSet, 0, nullptr);
@@ -140,7 +140,7 @@ void DescriptorSet::AddStorageBuffer(u32 binding, u32 descriptorCount, VkShaderS
     mStorageBufferCount++;
 }
 
-void DescriptorSet::BindStorageBuffer(Vulkan::Buffer *buffer, u32 binding, u32 elementIndex, u32 instance)
+void DescriptorSet::BindStorageBuffer(Vulkan::Buffer *buffer, u32 binding, u32 elementIndex)
 {
     auto device = Renderer::Get()->GetDevice();
     u32 dstArrayElement = buffer->mCount == 1 ? 0 : elementIndex;
@@ -158,7 +158,7 @@ void DescriptorSet::BindStorageBuffer(Vulkan::Buffer *buffer, u32 binding, u32 e
         writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         writeDescriptorSet.dstArrayElement = dstArrayElement;
         writeDescriptorSet.dstBinding = binding;
-        writeDescriptorSet.dstSet = mDescriptorSets[instance];
+        writeDescriptorSet.dstSet = mDescriptorSets[mActiveInstance];
         writeDescriptorSet.pBufferInfo = &bufferInfo;
     }
 
@@ -181,7 +181,7 @@ void DescriptorSet::AddInputBuffer(u32 binding, u32 descriptorCount, VkShaderSta
     mInputBufferCount++;
 }
 
-void DescriptorSet::BindInputBuffer(Vulkan::Buffer *buffer, u32 binding, u32 elementIndex, u32 instance)
+void DescriptorSet::BindInputBuffer(Vulkan::Buffer *buffer, u32 binding, u32 elementIndex)
 {
     auto device = Renderer::Get()->GetDevice();
     u32 dstArrayElement = buffer->mCount == 1 ? 0 : elementIndex;
@@ -199,7 +199,7 @@ void DescriptorSet::BindInputBuffer(Vulkan::Buffer *buffer, u32 binding, u32 ele
         writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         writeDescriptorSet.dstArrayElement = dstArrayElement;
         writeDescriptorSet.dstBinding = binding;
-        writeDescriptorSet.dstSet = mDescriptorSets[instance];
+        writeDescriptorSet.dstSet = mDescriptorSets[mActiveInstance];
         writeDescriptorSet.pBufferInfo = &bufferInfo;
     }
 

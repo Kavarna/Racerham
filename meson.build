@@ -31,9 +31,9 @@ jnrlib_srcs = [
 game_srcs = [
   'src/Application.cpp',
   'src/Gameplay/Entity.cpp',
-  'src/Gameplay/World.cpp',
+  'src/Gameplay/Game.cpp',
   'src/Gameplay/Camera.cpp',
-  'src/Gameplay/Systems/Physics.cpp',
+  'src/Gameplay/Systems/BasicRendering.cpp',
   'src/main.cpp',
   'src/Renderer/Vulkan/CommandList.cpp',
   'src/Renderer/Vulkan/Image.cpp',

@@ -2,6 +2,7 @@
 
 #include "Check.h"
 #include "Jnrlib.h"
+#include "Utils/Constants.h"
 #include <glm/glm.hpp>
 
 class Camera
@@ -11,15 +12,14 @@ public:
     Camera(glm::vec3 position, f32 width, f32 heigh, f32 fieldOfView);
 
 public:
-    void Update()
+    bool Update()
     {
-        CalculateMatrices();
+        return CalculateMatrices();
     }
     void MoveForward(float amount)
     {
         mPosition = mPosition + mForwardDirection * amount;
-        DSHOWINFO("Camera position: ", mPosition.x, ", ", mPosition.y, ", ",
-                  mPosition.z);
+        MarkDirty();
     }
 
     void MoveBackward(float amount)
@@ -30,6 +30,7 @@ public:
     void StrafeRight(float amount)
     {
         mPosition = mPosition + mRightDirection * amount;
+        MarkDirty();
     }
 
     void StrafeLeft(float amount)
@@ -55,21 +56,29 @@ public:
         CalculateVectors();
     }
 
-    glm::mat4x4 &GetView()
+    glm::mat4x4 const &GetView() const
     {
         return mView;
     }
-    glm::mat4x4 &GetProjection()
+    glm::mat4x4 const &GetProjection() const
     {
         return mProjection;
     }
 
 private:
-    void CalculateMatrices();
+    bool CalculateMatrices();
     void CalculateVectors();
 
+    void MarkDirty()
+    {
+
+        mDirtyFrames = Constants::MAX_IN_FLIGHT_FRAMES;
+    }
+
 private:
+    u32 mDirtyFrames;
     glm::vec3 mPosition;
+
     f32 mWidth;
     f32 mHeight;
     f32 mFieldOfView;

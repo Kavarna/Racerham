@@ -13,15 +13,23 @@ Camera::Camera(glm::vec3 position, f32 width, f32 heigh, f32 fieldOfView)
     mForwardDirection = Constants::DEFAULT_FORWARD_DIRECTION;
     mRightDirection = Constants::DEFAULT_RIGHT_DIRECTION;
     mUpDirection = Constants::DEFAULT_UP_DIRECTION;
+    MarkDirty();
 }
 
-void Camera::CalculateMatrices()
+bool Camera::CalculateMatrices()
 {
-    mView =
-        glm::lookAtLH(mPosition, mPosition + mForwardDirection, mUpDirection);
-    mProjection =
-        glm::perspectiveLH(mFieldOfView, mWidth / mHeight, 0.1f, 1000.0f);
-    mProjection[1][1] *= -1;
+    if (mDirtyFrames > 0)
+    {
+        mView = glm::lookAtLH(mPosition, mPosition + mForwardDirection,
+                              mUpDirection);
+        mProjection =
+            glm::perspectiveLH(mFieldOfView, mWidth / mHeight, 0.1f, 1000.0f);
+        mProjection[1][1] *= -1;
+
+        mDirtyFrames--;
+        return true;
+    }
+    return false;
 }
 
 void Camera::CalculateVectors()
@@ -31,4 +39,5 @@ void Camera::CalculateVectors()
     mForwardDirection = Constants::DEFAULT_FORWARD_DIRECTION * rotateMatrix;
     mRightDirection = Constants::DEFAULT_RIGHT_DIRECTION * rotateMatrix;
     mUpDirection = glm::cross(mForwardDirection, mRightDirection);
+    MarkDirty();
 }
