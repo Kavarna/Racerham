@@ -17,8 +17,6 @@ namespace BasicRendering
 
 SharedState::SharedState(u32 numInstances)
 {
-    glm::vec2 windowDimensions = Application::Get()->GetWindowDimensions();
-
     /* Create a simple root signature*/
     mDescriptorSet = std::make_unique<Vulkan::DescriptorSet>();
     {
@@ -32,8 +30,13 @@ SharedState::SharedState(u32 numInstances)
         mRootSignature->AddDescriptorSet(mDescriptorSet.get());
     }
     mRootSignature->Bake();
+    OnResize();
+}
 
+void SharedState::OnResize()
+{
     /* Create simple mPipeline */
+    glm::vec2 windowDimensions = Application::Get()->GetWindowDimensions();
     VkViewport viewport = {};
     {
         viewport.width = windowDimensions.x;
@@ -139,8 +142,8 @@ void RenderSystem::Render(Vulkan::CommandList *cmdList,
                 update.bufferIndex);
             info->world = base.world;
             mIsDirty = true;
-            SHOWINFO("Update world for object ", update.bufferIndex,
-                     " because dirty frames is ", update.dirtyFrames);
+            // SHOWINFO("Update world for object ", update.bufferIndex,
+            //          " because dirty frames is ", update.dirtyFrames);
         }
     }
 

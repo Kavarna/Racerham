@@ -13,6 +13,7 @@
 #include "glm/glm.hpp"
 
 #include "vulkan/vulkan_core.h"
+#include <chrono>
 
 /* Redirects for callbacks */
 void OnResizeCallback(GLFWwindow *window, int width, int height)
@@ -95,13 +96,22 @@ glm::vec2 Application::GetMouseRelativePosition()
 
 void Application::Frame()
 {
+    static auto lastTime = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<float> frameTime = currentTime - lastTime;
+    lastTime = currentTime;
+
     auto *game = Game::Get();
-    game->Update();
+    game->Update(frameTime.count());
     game->Render();
 
     if (IsKeyPressed(GLFW_KEY_ESCAPE))
     {
         glfwSetWindowShouldClose(mWindow, 1);
+    }
+    if (IsKeyPressed(GLFW_KEY_APOSTROPHE))
+    {
+        SetMouseInputMode(true);
     }
 }
 
@@ -119,8 +129,10 @@ void Application::OnResize(u32 width, u32 height)
     mWidth = width;
     mHeight = height;
 
+    SHOWINFO("Window resized to ", width, "x", height);
     Vulkan::Renderer::Get()->WaitIdle();
     Vulkan::Renderer::Get()->OnResize();
+    Game::Get()->OnResize();
 }
 
 bool Application::IsKeyPressed(int keyCode)

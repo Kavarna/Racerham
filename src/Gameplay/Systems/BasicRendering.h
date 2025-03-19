@@ -25,6 +25,9 @@ public:
     SharedState &operator=(const SharedState &) = delete;
     SharedState &operator=(SharedState &&) = delete;
 
+public:
+    void OnResize();
+
 private:
     std::unique_ptr<Vulkan::Pipeline> mPipeline;
     std::unique_ptr<Vulkan::RootSignature> mRootSignature;

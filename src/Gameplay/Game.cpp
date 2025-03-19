@@ -113,6 +113,11 @@ void Game::InitResources()
                      (f32)windowDimensions.y, glm::pi<float>() / 4);
 }
 
+void Game::OnResize()
+{
+    mState.OnResize();
+}
+
 Components::Mesh Game::InitGeometry(std::string_view path)
 {
     if (path == "quad")
@@ -261,31 +266,38 @@ Entity *Game::AddGround()
     return mEntities.back().get();
 }
 
-void Game::Update()
+void Game::Update(float dt)
 {
     auto &perFrameResources = mPerFrameResources[mCurrentFrame];
     auto *application = Application::Get();
-    float dt = 0.0016f;
 
+    static float totalTime = 0.0f;
+    totalTime += dt;
+    if (totalTime >= 1.0f)
+    {
+        totalTime -= 1.0f;
+    }
+
+    constexpr float cameraSpeed = 5.0f;
     if (application->IsKeyPressed(GLFW_KEY_W) ||
         application->IsKeyPressed(GLFW_KEY_UP))
     {
-        mCamera.MoveForward(dt);
+        mCamera.MoveForward(dt * cameraSpeed);
     }
     if (application->IsKeyPressed(GLFW_KEY_S) ||
         application->IsKeyPressed(GLFW_KEY_DOWN))
     {
-        mCamera.MoveBackward(dt);
+        mCamera.MoveBackward(dt * cameraSpeed);
     }
     if (application->IsKeyPressed(GLFW_KEY_A) ||
         application->IsKeyPressed(GLFW_KEY_LEFT))
     {
-        mCamera.StrafeLeft(dt);
+        mCamera.StrafeLeft(dt * cameraSpeed);
     }
     if (application->IsKeyPressed(GLFW_KEY_D) ||
         application->IsKeyPressed(GLFW_KEY_RIGHT))
     {
-        mCamera.StrafeRight(dt);
+        mCamera.StrafeRight(dt * cameraSpeed);
     }
 
     if (application->IsKeyPressed(GLFW_KEY_SPACE))

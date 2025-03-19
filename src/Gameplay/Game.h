@@ -31,7 +31,7 @@ private:
 public:
     void OnResize();
 
-    void Update();
+    void Update(float dt);
     void Render();
 
 private:
