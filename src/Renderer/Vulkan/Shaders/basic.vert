@@ -2,7 +2,6 @@
 
 struct PerObjectInfo {
     mat4 world;
-    uint materialIndex;
 };
 
 layout(push_constant) uniform ObjectIndex
@@ -30,7 +29,14 @@ void main()
 
     gl_Position = uniformObject.viewProj * ob.world * vec4(inPosition, 1.0);
 
-    fragColor = vec3(1.0, 1.0, 1.0);
+    if (PushConstant.objectIndex == 0)
+    {
+        fragColor = vec3(1.0, 1.0, 1.0);
+    }
+    else
+    {
+        fragColor = vec3(0.0, 1.0, 0.0);
+    }
 
     // materialIndex = ob.materialIndex;
     // outNormal = (ob.world * vec4(inNormal, 0.0f)).xyz;

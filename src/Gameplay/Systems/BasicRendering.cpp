@@ -139,7 +139,8 @@ void RenderSystem::Render(Vulkan::CommandList *cmdList,
                 update.bufferIndex);
             info->world = base.world;
             mIsDirty = true;
-            SHOWINFO("Updating world", mSharedStateIndex);
+            SHOWINFO("Update world for object ", update.bufferIndex,
+                     " because dirty frames is ", update.dirtyFrames);
         }
     }
 

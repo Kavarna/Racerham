@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Gameplay/Systems/BasicRendering.h"
+#include "Gameplay/Systems/Physics.h"
 #include "Gameplay/Systems/UpdateFrame.h"
 #include "Singletone.h"
 #include "entt/entt.hpp"
@@ -46,6 +47,7 @@ private:
     void BakeRenderingBuffers(Vulkan::CommandList *initCommandList);
 
     Entity *AddTestEntity(std::string_view name);
+    Entity *AddGround();
 
 private:
     struct PerFrameResource
@@ -68,6 +70,7 @@ private:
     std::vector<u32> mStagedIndexBuffer;
 
     Systems::UpdateFrame mUpdateFrameSystem;
+    Systems::Physics mPhysicsSystem;
 
     Camera mCamera;
 

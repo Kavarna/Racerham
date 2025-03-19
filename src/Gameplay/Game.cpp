@@ -3,9 +3,12 @@
 
 #include "Check.h"
 #include "Exceptions.h"
+#include "GLFW/glfw3.h"
 #include "Gameplay/Components/Mesh.h"
+#include "Gameplay/Components/RigidBody.h"
 #include "Gameplay/Components/Update.h"
 #include "Gameplay/Systems/BasicRendering.h"
+#include "Gameplay/Systems/Physics.h"
 #include "Renderer/Vulkan/Buffer.h"
 #include "Renderer/Vulkan/CommandList.h"
 #include "Renderer/Vulkan/MemoryAllocator.h"
@@ -15,6 +18,8 @@
 #include "Components/Base.h"
 
 #include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/quaternion_common.hpp"
+#include "glm/fwd.hpp"
 #include "glm/glm.hpp"
 #include "vulkan/vulkan_core.h"
 #include <string_view>
@@ -30,6 +35,7 @@ Game::~Game()
 {
     DestroyFrameResources();
 
+    mEntities.clear();
     mGlobalVertexBuffer.reset();
 }
 
@@ -51,6 +57,7 @@ void Game::InitPerFrameResources()
 void Game::InitScene(Vulkan::CommandList *initCommandList)
 {
     AddTestEntity("TestEntity1");
+    AddGround();
     BakeRenderingBuffers(initCommandList);
 }
 
@@ -142,6 +149,54 @@ Components::Mesh Game::InitGeometry(std::string_view path)
 
         return mesh;
     }
+    else if (path == "cube")
+    {
+        static bool initialized = false;
+        static Components::Mesh mesh = {};
+        if (initialized)
+        {
+            return mesh;
+        }
+
+        u32 firstVertex = (u32)mStagedVertexBuffer.size();
+        u32 firstIndex = (u32)mStagedIndexBuffer.size();
+
+        mStagedVertexBuffer.reserve(mStagedVertexBuffer.size() + 8);
+        mStagedIndexBuffer.reserve(mStagedIndexBuffer.size() + 36);
+
+        // Define cube vertices (position + normal)
+        mStagedVertexBuffer.emplace_back(-1.0f, -1.0f, -1.0f, 0.0f, 0.0f,
+                                         -1.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f);
+        mStagedVertexBuffer.emplace_back(-1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f);
+
+        mStagedVertexBuffer.emplace_back(-1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f);
+        mStagedVertexBuffer.emplace_back(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f);
+
+        // Define cube indices (two triangles per face, six faces)
+        u32 indices[] = {
+            0, 1, 2, 0, 2, 3, // Back face
+            4, 5, 6, 4, 6, 7, // Front face
+            0, 1, 5, 0, 5, 4, // Bottom face
+            3, 2, 6, 3, 6, 7, // Top face
+            0, 3, 7, 0, 7, 4, // Left face
+            1, 2, 6, 1, 6, 5  // Right face
+        };
+
+        mStagedIndexBuffer.insert(mStagedIndexBuffer.end(), std::begin(indices),
+                                  std::end(indices));
+
+        mesh.path = path;
+        mesh.indices.firstIndex = firstIndex;
+        mesh.indices.firstVertex = firstVertex;
+        mesh.indices.indexCount = 36;
+        mesh.indices.vertexCount = 8;
+
+        return mesh;
+    }
 
     /* Very javaeque of me */
     throw Jnrlib::Exceptions::JNRException(
@@ -154,11 +209,12 @@ Entity *Game::AddTestEntity(std::string_view name)
     std::unique_ptr<Entity> entity =
         std::make_unique<Entity>(mRegistry.create(), mRegistry);
 
-    entity->AddComponent(
-        Components::Base{.world = glm::identity<glm::mat4x4>(),
-                         .name = std::string(name),
-                         .inverseWorld = glm::identity<glm::mat4x4>(),
-                         .entityPtr = entity.get()});
+    glm::mat4x4 world = glm::identity<glm::mat4x4>();
+    world = glm::translate(world, glm::vec3(0.0f, 5.0f, 0.0f));
+    entity->AddComponent(Components::Base{.world = world,
+                                          .name = std::string(name),
+                                          .inverseWorld = glm::inverse(world),
+                                          .entityPtr = entity.get()});
     entity->AddComponent(
         Components::Update{.dirtyFrames = Constants::MAX_IN_FLIGHT_FRAMES,
                            .bufferIndex = (u32)mEntities.size()});
@@ -166,7 +222,39 @@ Entity *Game::AddTestEntity(std::string_view name)
         entity.get());
     entity->UpdateBase();
 
-    entity->AddComponent(InitGeometry("quad"));
+    entity->AddComponent(InitGeometry("cube"));
+    entity->AddComponent(mPhysicsSystem.CreateRigidBody(
+        entity->GetComponent<Components::Base>(),
+        entity->GetComponent<Components::Mesh>(), 1.0f));
+
+    mEntities.push_back(std::move(entity));
+
+    return mEntities.back().get();
+}
+
+Entity *Game::AddGround()
+{
+    std::unique_ptr<Entity> entity =
+        std::make_unique<Entity>(mRegistry.create(), mRegistry);
+
+    glm::mat4x4 world = glm::identity<glm::mat4x4>();
+    world = glm::translate(world, glm::vec3(0.0f, -50.0f, 0.0f));
+    world = glm::scale(world, glm::vec3(50.f, 50.f, 50.f));
+    entity->AddComponent(Components::Base{.world = world,
+                                          .name = std::string("Ground"),
+                                          .inverseWorld = glm::inverse(world),
+                                          .entityPtr = entity.get()});
+    entity->AddComponent(
+        Components::Update{.dirtyFrames = Constants::MAX_IN_FLIGHT_FRAMES,
+                           .bufferIndex = (u32)mEntities.size()});
+    mRegistry.on_update<Components::Base>().connect<&Entity::UpdateBase>(
+        entity.get());
+    entity->UpdateBase();
+
+    entity->AddComponent(InitGeometry("cube"));
+    entity->AddComponent(mPhysicsSystem.CreateRigidBody(
+        entity->GetComponent<Components::Base>(),
+        entity->GetComponent<Components::Mesh>(), 0.0f));
 
     mEntities.push_back(std::move(entity));
 
@@ -177,26 +265,36 @@ void Game::Update()
 {
     auto &perFrameResources = mPerFrameResources[mCurrentFrame];
     auto *application = Application::Get();
+    float dt = 0.0016f;
 
     if (application->IsKeyPressed(GLFW_KEY_W) ||
         application->IsKeyPressed(GLFW_KEY_UP))
     {
-        mCamera.MoveForward(0.0016f);
+        mCamera.MoveForward(dt);
     }
     if (application->IsKeyPressed(GLFW_KEY_S) ||
         application->IsKeyPressed(GLFW_KEY_DOWN))
     {
-        mCamera.MoveBackward(0.0016f);
+        mCamera.MoveBackward(dt);
     }
     if (application->IsKeyPressed(GLFW_KEY_A) ||
         application->IsKeyPressed(GLFW_KEY_LEFT))
     {
-        mCamera.StrafeLeft(0.0016f);
+        mCamera.StrafeLeft(dt);
     }
     if (application->IsKeyPressed(GLFW_KEY_D) ||
         application->IsKeyPressed(GLFW_KEY_RIGHT))
     {
-        mCamera.StrafeRight(0.0016f);
+        mCamera.StrafeRight(dt);
+    }
+
+    if (application->IsKeyPressed(GLFW_KEY_SPACE))
+    {
+        auto &rigidBody = mEntities[0]->GetComponent<Components::RigidBody>();
+        rigidBody.rigidBody->activate(true);
+        rigidBody.rigidBody->applyCentralImpulse(btVector3(0.003f, 0.1f, 0.0f));
+        btVector3 spin(0, 5, 5); // Spin around the Y-axis
+        rigidBody.rigidBody->setAngularVelocity(spin);
     }
 
     auto mouseMovement = application->GetMouseRelativePosition();
@@ -209,15 +307,7 @@ void Game::Update()
         perFrameResources.basicRenderSystem->UpdateCamera(mCamera);
     }
 
-    if (application->IsKeyPressed(GLFW_KEY_P))
-    {
-        mRegistry.patch<Components::Base>(
-            (entt::entity)mEntities[0]->GetEntityId(),
-            [&](Components::Base &base) {
-                base.world = glm::rotate(base.world, 0.00016f,
-                                         glm::vec3(0.0f, 0.0f, 1.0f));
-            });
-    }
+    mPhysicsSystem.Update(dt, mRegistry);
 }
 
 void Game::Render()

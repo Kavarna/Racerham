@@ -12,6 +12,7 @@ if system == 'windows'
   add_project_arguments('-DOS_WINDOWS', language: 'cpp')
 endif
 
+add_global_arguments('-DGLM_ENABLE_EXPERIMENTAL', language: ['c', ['cpp']])
 add_global_arguments('-DVK_NO_PROTOTYPES', language: ['c', 'cpp'])
 
 bullet_physics = dependency('bullet')
@@ -34,6 +35,7 @@ game_srcs = [
   'src/Gameplay/Game.cpp',
   'src/Gameplay/Camera.cpp',
   'src/Gameplay/Systems/BasicRendering.cpp',
+  'src/Gameplay/Systems/Physics.cpp',
   'src/main.cpp',
   'src/Renderer/Vulkan/CommandList.cpp',
   'src/Renderer/Vulkan/Image.cpp',
