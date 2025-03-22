@@ -95,7 +95,18 @@ void SharedState::OnResize()
         vertexInput.pVertexBindingDescriptions =
             vertexPositionBindingDescription.data();
     }
+    {
+        auto &depthState = mPipeline->GetDepthStencilStateCreateInfo();
+        depthState.depthTestEnable = VK_TRUE;
+        depthState.depthWriteEnable = VK_TRUE;
+        depthState.depthBoundsTestEnable = VK_TRUE;
+        depthState.depthCompareOp = VK_COMPARE_OP_LESS;
+        depthState.depthBoundsTestEnable = VK_TRUE;
+        depthState.minDepthBounds = 0.0f;
+        depthState.maxDepthBounds = 1.0f;
+    }
     mPipeline->AddBackbufferColorOutput();
+    mPipeline->SetBackbufferDepthStencilOutput();
     mPipeline->Bake();
 }
 

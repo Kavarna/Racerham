@@ -906,7 +906,7 @@ VkFormat Renderer::GetDefaultStencilFormat()
 
 VkFormat Renderer::GetDefaultDepthFormat()
 {
-    return VK_FORMAT_UNDEFINED;
+    return VK_FORMAT_D32_SFLOAT;
 }
 
 VkExtent2D Renderer::GetBackbufferExtent()

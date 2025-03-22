@@ -49,13 +49,15 @@ public:
 
     void CopyBuffer(Vulkan::Buffer *dst, Vulkan::Buffer *src);
     void CopyBuffer(Vulkan::Buffer *dst, u32 dstOffset, Vulkan::Buffer *src);
-    void CopyBuffer(Vulkan::Buffer *dst, u32 dstOffset, Vulkan::Buffer *src, u32 srcOffset);
+    void CopyBuffer(Vulkan::Buffer *dst, u32 dstOffset, Vulkan::Buffer *src,
+                    u32 srcOffset);
 
     void BindVertexBuffer(Vulkan::Buffer const *buffer, u32 firstIndex);
     void BindIndexBuffer(Vulkan::Buffer const *buffer);
 
     void BindPipeline(Pipeline *pipeline);
-    void BindDescriptorSet(DescriptorSet *set, u32 descriptorSetInstance, RootSignature *rootSignature);
+    void BindDescriptorSet(DescriptorSet *set, u32 descriptorSetInstance,
+                           RootSignature *rootSignature);
     void SetScissor(std::vector<VkRect2D> const &scissors);
     void SetViewports(std::vector<VkViewport> const &viewports);
     void Draw(u32 vertexCount, u32 firstVertex);
@@ -66,11 +68,15 @@ public:
 
     void CopyWholeBufferToImage(Image *, Buffer *);
 
-    void BeginRenderPassOnBackbuffer(RenderPass *rp, std::vector<Framebuffer *> const &fb, float const *clearColor);
+    void BeginRenderPassOnBackbuffer(RenderPass *rp,
+                                     std::vector<Framebuffer *> const &fb,
+                                     float const *clearColor);
     void EndRenderPass();
 
-    void BeginRenderingOnBackbuffer(float const backgroundColor[4]);
-    void BeginRenderingOnImage(Image *img, float const backgroundColor[4], Image *depth, bool useStencil);
+    void BeginRenderingOnBackbuffer(float const backgroundColor[4],
+                                    Image *depth, bool useStencil);
+    void BeginRenderingOnImage(Image *img, float const backgroundColor[4],
+                               Image *depth, bool useStencil);
     void EndRendering();
 
     void AddLocalBuffer(std::unique_ptr<Buffer> &&buffer);
@@ -82,10 +88,12 @@ public:
 
 public:
     template <typename T>
-    void BindPushRange(RootSignature *rootSignature, u32 offset, u32 count, T const *data,
+    void BindPushRange(RootSignature *rootSignature, u32 offset, u32 count,
+                       T const *data,
                        VkShaderStageFlags stages = VK_SHADER_STAGE_ALL)
     {
-        jnrCmdPushConstants(mCommandBuffers[mActiveCommandIndex], rootSignature->mPipelineLayout, stages, offset,
+        jnrCmdPushConstants(mCommandBuffers[mActiveCommandIndex],
+                            rootSignature->mPipelineLayout, stages, offset,
                             sizeof(T) * count, data);
     }
 
@@ -103,7 +111,8 @@ private:
     LayoutTracker mLayoutTracker;
     MemoryTracker mMemoryTracker;
 
-    /* TODO: Maybe do something smarter once multiple synchronization objects will be needed */
+    /* TODO: Maybe do something smarter once multiple synchronization objects
+     * will be needed */
     std::unique_ptr<GPUSynchronizationObject> mBackbufferAvailable = nullptr;
     std::unique_ptr<GPUSynchronizationObject> mRenderingFinished = nullptr;
 

@@ -72,6 +72,8 @@ private:
     Systems::UpdateFrame mUpdateFrameSystem;
     Systems::Physics mPhysicsSystem;
 
+    std::unique_ptr<Vulkan::Image> mDepthImage;
+
     Camera mCamera;
 
     BatchRenderer mBatchRenderer;

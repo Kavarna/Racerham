@@ -12,7 +12,9 @@
 #include "Gameplay/Systems/Physics.h"
 #include "Renderer/Vulkan/Buffer.h"
 #include "Renderer/Vulkan/CommandList.h"
+#include "Renderer/Vulkan/Image.h"
 #include "Renderer/Vulkan/MemoryAllocator.h"
+#include "Renderer/Vulkan/Renderer.h"
 #include "Utils/Constants.h"
 #include "Utils/Vertex.h"
 
@@ -116,6 +118,16 @@ void Game::InitResources()
     /* Create simple camera */
     mCamera = Camera(glm::vec3(0.0f, 0.0f, -5.0f), (f32)windowDimensions.x,
                      (f32)windowDimensions.y, glm::pi<float>() / 4);
+
+    Vulkan::Image::Info2D depthInfo;
+    {
+        depthInfo.width = (u32)windowDimensions.x;
+        depthInfo.height = (u32)windowDimensions.y;
+        depthInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        depthInfo.format = Vulkan::Renderer::Get()->GetDefaultDepthFormat();
+        depthInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    }
+    mDepthImage = std::make_unique<Vulkan::Image>(depthInfo);
 }
 
 void Game::OnResize()
@@ -341,7 +353,8 @@ void Game::Render()
     cmdList->Begin();
     {
         f32 backgroundColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-        cmdList->BeginRenderingOnBackbuffer(backgroundColor);
+        cmdList->BeginRenderingOnBackbuffer(backgroundColor, mDepthImage.get(),
+                                            false);
         basicRenderSystem->Render(cmdList.get(), mRegistry, mEntities.size());
         mBatchRenderer.Render(cmdList.get(), mCamera);
         cmdList->EndRendering();

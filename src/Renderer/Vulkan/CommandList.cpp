@@ -23,7 +23,8 @@ CommandList::CommandList(CommandListType cmdListType) : mType(cmdListType)
         poolInfo.queueFamilyIndex = queueIndex;
     }
 
-    vkThrowIfFailed(jnrCreateCommandPool(renderer->mDevice, &poolInfo, nullptr, &mCommandPool));
+    vkThrowIfFailed(jnrCreateCommandPool(renderer->mDevice, &poolInfo, nullptr,
+                                         &mCommandPool));
 }
 
 CommandList::~CommandList()
@@ -34,7 +35,8 @@ CommandList::~CommandList()
 
 void CommandList::Init(u32 numCommandBuffers)
 {
-    ThrowIfFailed(numCommandBuffers > 0, "There should be at least one command buffer initialised");
+    ThrowIfFailed(numCommandBuffers > 0,
+                  "There should be at least one command buffer initialised");
 
     auto device = Renderer::Get()->GetDevice();
     ResetAll();
@@ -48,7 +50,8 @@ void CommandList::Init(u32 numCommandBuffers)
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     }
 
-    vkThrowIfFailed(jnrAllocateCommandBuffers(device, &allocInfo, mCommandBuffers.data()));
+    vkThrowIfFailed(
+        jnrAllocateCommandBuffers(device, &allocInfo, mCommandBuffers.data()));
 }
 
 void CommandList::ResetAll()
@@ -64,14 +67,16 @@ void CommandList::Begin()
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     }
-    vkThrowIfFailed(jnrBeginCommandBuffer(mCommandBuffers[mActiveCommandIndex], &beginInfo));
+    vkThrowIfFailed(jnrBeginCommandBuffer(mCommandBuffers[mActiveCommandIndex],
+                                          &beginInfo));
     {
         /* Reset current recording info */
         mImageIndex = -1;
         mTemporaryStorageOffset = 0;
     }
 
-    /* DSHOWINFO("[", (void *)mCommandBuffers[mActiveCommandIndex], "] Start recording command buffer"); */
+    /* DSHOWINFO("[", (void *)mCommandBuffers[mActiveCommandIndex], "] Start
+     * recording command buffer"); */
 }
 
 void CommandList::End()
@@ -93,11 +98,13 @@ void CommandList::End()
 
     vkThrowIfFailed(jnrEndCommandBuffer(mCommandBuffers[mActiveCommandIndex]));
 
-    /* TODO: To be more correct, we could do this after the CPUSynchronizationObject was triggered */
+    /* TODO: To be more correct, we could do this after the
+     * CPUSynchronizationObject was triggered */
     mLayoutTracker.Flush();
     mMemoryTracker.Flush();
 
-    /*DSHOWINFO("[", (void *)mCommandBuffers[mActiveCommandIndex], "] Finish recording command buffer");*/
+    /*DSHOWINFO("[", (void *)mCommandBuffers[mActiveCommandIndex], "] Finish
+     * recording command buffer");*/
 }
 
 void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer *dst, Vulkan::Buffer *src)
@@ -105,14 +112,17 @@ void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer *dst, Vulkan::Buffer *src)
     CopyBuffer(dst, 0, src, 0);
 }
 
-void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer *dst, u32 dstOffset, Vulkan::Buffer *src)
+void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer *dst, u32 dstOffset,
+                                     Vulkan::Buffer *src)
 {
     CopyBuffer(dst, dstOffset, src, 0);
 }
 
-void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer *dst, u32 dstOffset, Vulkan::Buffer *src, u32 srcOffset)
+void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer *dst, u32 dstOffset,
+                                     Vulkan::Buffer *src, u32 srcOffset)
 {
-    ThrowIfFailed(dst->mCount >= src->mCount, "Cannot copy a larger buffer into a smaller one");
+    ThrowIfFailed(dst->mCount >= src->mCount,
+                  "Cannot copy a larger buffer into a smaller one");
 
     VkBufferCopy copyInfo{};
     {
@@ -120,13 +130,16 @@ void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer *dst, u32 dstOffset, Vulkan:
         copyInfo.dstOffset = dstOffset;
         copyInfo.size = src->GetElementSize() * src->mCount;
     }
-    jnrCmdCopyBuffer(mCommandBuffers[mActiveCommandIndex], src->mBuffer, dst->mBuffer, 1, &copyInfo);
+    jnrCmdCopyBuffer(mCommandBuffers[mActiveCommandIndex], src->mBuffer,
+                     dst->mBuffer, 1, &copyInfo);
 }
 
-void Vulkan::CommandList::BindVertexBuffer(Vulkan::Buffer const *buffer, u32 firstIndex)
+void Vulkan::CommandList::BindVertexBuffer(Vulkan::Buffer const *buffer,
+                                           u32 firstIndex)
 {
     VkDeviceSize offsets[] = {0};
-    jnrCmdBindVertexBuffers(mCommandBuffers[mActiveCommandIndex], firstIndex, 1, &buffer->mBuffer, offsets);
+    jnrCmdBindVertexBuffers(mCommandBuffers[mActiveCommandIndex], firstIndex, 1,
+                            &buffer->mBuffer, offsets);
 }
 
 void Vulkan::CommandList::BindIndexBuffer(Vulkan::Buffer const *buffer)
@@ -136,39 +149,49 @@ void Vulkan::CommandList::BindIndexBuffer(Vulkan::Buffer const *buffer)
         indexType = VK_INDEX_TYPE_UINT32;
     else if (buffer->GetElementSize() == sizeof(u16))
         indexType = VK_INDEX_TYPE_UINT16;
-    jnrCmdBindIndexBuffer(mCommandBuffers[mActiveCommandIndex], buffer->mBuffer, 0, indexType);
+    jnrCmdBindIndexBuffer(mCommandBuffers[mActiveCommandIndex], buffer->mBuffer,
+                          0, indexType);
 }
 
 void CommandList::Draw(u32 vertexCount, u32 firstVertex)
 {
-    jnrCmdDraw(mCommandBuffers[mActiveCommandIndex], vertexCount, 1, firstVertex, 0);
+    jnrCmdDraw(mCommandBuffers[mActiveCommandIndex], vertexCount, 1,
+               firstVertex, 0);
 }
 
-void Vulkan::CommandList::DrawIndexedInstanced(u32 indexCount, u32 firstIndex, u32 vertexOffset)
+void Vulkan::CommandList::DrawIndexedInstanced(u32 indexCount, u32 firstIndex,
+                                               u32 vertexOffset)
 {
-    jnrCmdDrawIndexed(mCommandBuffers[mActiveCommandIndex], indexCount, 1, firstIndex, vertexOffset, 0);
+    jnrCmdDrawIndexed(mCommandBuffers[mActiveCommandIndex], indexCount, 1,
+                      firstIndex, vertexOffset, 0);
 }
 
 void CommandList::BindPipeline(Pipeline *pipeline)
 {
-    jnrCmdBindPipeline(mCommandBuffers[mActiveCommandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->mPipeline);
+    jnrCmdBindPipeline(mCommandBuffers[mActiveCommandIndex],
+                       VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->mPipeline);
 }
 
-void CommandList::BindDescriptorSet(DescriptorSet *set, u32 descriptorSetInstance, RootSignature *rootSignature)
+void CommandList::BindDescriptorSet(DescriptorSet *set,
+                                    u32 descriptorSetInstance,
+                                    RootSignature *rootSignature)
 {
-    jnrCmdBindDescriptorSets(mCommandBuffers[mActiveCommandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS,
-                             rootSignature->mPipelineLayout, 0, 1, &set->mDescriptorSets[descriptorSetInstance], 0,
-                             nullptr);
+    jnrCmdBindDescriptorSets(
+        mCommandBuffers[mActiveCommandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS,
+        rootSignature->mPipelineLayout, 0, 1,
+        &set->mDescriptorSets[descriptorSetInstance], 0, nullptr);
 }
 
 void CommandList::SetScissor(std::vector<VkRect2D> const &scissors)
 {
-    jnrCmdSetScissor(mCommandBuffers[mActiveCommandIndex], 0, (u32)scissors.size(), scissors.data());
+    jnrCmdSetScissor(mCommandBuffers[mActiveCommandIndex], 0,
+                     (u32)scissors.size(), scissors.data());
 }
 
 void CommandList::SetViewports(std::vector<VkViewport> const &viewports)
 {
-    jnrCmdSetViewport(mCommandBuffers[mActiveCommandIndex], 0, (u32)viewports.size(), viewports.data());
+    jnrCmdSetViewport(mCommandBuffers[mActiveCommandIndex], 0,
+                      (u32)viewports.size(), viewports.data());
 }
 
 void CommandList::TransitionBackbufferTo(TransitionInfo const &transitionInfo)
@@ -179,7 +202,8 @@ void CommandList::TransitionBackbufferTo(TransitionInfo const &transitionInfo)
         imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         imageMemoryBarrier.srcAccessMask = transitionInfo.srcAccessMask;
         imageMemoryBarrier.dstAccessMask = transitionInfo.dstAccessMask;
-        imageMemoryBarrier.oldLayout = mLayoutTracker.GetBackbufferImageLayout(mImageIndex);
+        imageMemoryBarrier.oldLayout =
+            mLayoutTracker.GetBackbufferImageLayout(mImageIndex);
         imageMemoryBarrier.newLayout = transitionInfo.newLayout;
         imageMemoryBarrier.image = renderer->mSwapchainImages[mImageIndex];
 
@@ -192,24 +216,29 @@ void CommandList::TransitionBackbufferTo(TransitionInfo const &transitionInfo)
         };
     }
 
-    jnrCmdPipelineBarrier(mCommandBuffers[mActiveCommandIndex], transitionInfo.srcStage, transitionInfo.dstStage, 0, 0,
-                          nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+    jnrCmdPipelineBarrier(mCommandBuffers[mActiveCommandIndex],
+                          transitionInfo.srcStage, transitionInfo.dstStage, 0,
+                          0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
 
-    mLayoutTracker.TransitionBackBufferImage(mImageIndex, transitionInfo.newLayout);
+    mLayoutTracker.TransitionBackBufferImage(mImageIndex,
+                                             transitionInfo.newLayout);
 
-    /*DSHOWINFO("[", (void *)mCommandBuffers[mActiveCommandIndex], "] Transitioning backbuffer image ", mImageIndex,
-              " from layout ", string_VkImageLayout(imageMemoryBarrier.oldLayout), " to ",
+    /*DSHOWINFO("[", (void *)mCommandBuffers[mActiveCommandIndex], "]
+       Transitioning backbuffer image ", mImageIndex, " from layout ",
+       string_VkImageLayout(imageMemoryBarrier.oldLayout), " to ",
               string_VkImageLayout(imageMemoryBarrier.newLayout));*/
 }
 
-void CommandList::TransitionImageTo(Image *img, TransitionInfo const &transitionInfo)
+void CommandList::TransitionImageTo(Image *img,
+                                    TransitionInfo const &transitionInfo)
 {
     VkImageAspectFlags aspectMask = 0;
     if (transitionInfo.newLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
     {
         aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
     }
-    else if (transitionInfo.newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+    else if (transitionInfo.newLayout ==
+             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
     {
         aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
         aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
@@ -242,20 +271,25 @@ void CommandList::TransitionImageTo(Image *img, TransitionInfo const &transition
         return;
     }
 
-    jnrCmdPipelineBarrier(mCommandBuffers[mActiveCommandIndex], transitionInfo.srcStage, transitionInfo.dstStage, 0, 0,
-                          nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+    jnrCmdPipelineBarrier(mCommandBuffers[mActiveCommandIndex],
+                          transitionInfo.srcStage, transitionInfo.dstStage, 0,
+                          0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
 
     mLayoutTracker.TransitionImage(img, transitionInfo.newLayout);
 
-    /*DSHOWINFO("[", (void *)mCommandBuffers[mActiveCommandIndex], "] Transitioning image ", img->mImage, " from layout
+    /*DSHOWINFO("[", (void *)mCommandBuffers[mActiveCommandIndex], "]
+       Transitioning image ", img->mImage, " from layout
        ", string_VkImageLayout(imageMemoryBarrier.oldLayout), " to ",
               string_VkImageLayout(imageMemoryBarrier.newLayout));*/
 }
 
 void CommandList::CopyWholeBufferToImage(Image *image, Buffer *buffer)
 {
-    ThrowIfFailed(image->mExtent2D.width * image->mExtent2D.height == buffer->mCount, "Invalid image");
-    ThrowIfFailed(image->mCreateInfo.imageType == VK_IMAGE_TYPE_2D, "Can only copy 2d images");
+    ThrowIfFailed(image->mExtent2D.width * image->mExtent2D.height ==
+                      buffer->mCount,
+                  "Invalid image");
+    ThrowIfFailed(image->mCreateInfo.imageType == VK_IMAGE_TYPE_2D,
+                  "Can only copy 2d images");
 
     VkImageAspectFlags imageAspectFlags = 0;
     for (auto const &[key, value] : image->mImageViews)
@@ -269,7 +303,9 @@ void CommandList::CopyWholeBufferToImage(Image *image, Buffer *buffer)
         imageLayers.baseArrayLayer = 0;
         imageLayers.aspectMask = imageAspectFlags;
     }
-    VkExtent3D imageExtent{.width = image->mExtent2D.width, .height = image->mExtent2D.height, .depth = 1};
+    VkExtent3D imageExtent{.width = image->mExtent2D.width,
+                           .height = image->mExtent2D.height,
+                           .depth = 1};
     VkBufferImageCopy region{};
     {
         region.bufferImageHeight = image->mExtent2D.height;
@@ -279,18 +315,22 @@ void CommandList::CopyWholeBufferToImage(Image *image, Buffer *buffer)
         region.imageOffset = VkOffset3D{.x = 0, .y = 0, .z = 0};
         region.imageSubresource = imageLayers;
     }
-    jnrCmdCopyBufferToImage(mCommandBuffers[mActiveCommandIndex], buffer->mBuffer, image->mImage,
+    jnrCmdCopyBufferToImage(mCommandBuffers[mActiveCommandIndex],
+                            buffer->mBuffer, image->mImage,
                             mLayoutTracker.GetImageLayout(image), 1, &region);
 }
 
 u32 CommandList::GetCurrentBackbufferIndex()
 {
-    ThrowIfFailed(mImageIndex != -1, "Can't retrieve the backbuffer index without beginnig on a backbuffer");
+    ThrowIfFailed(
+        mImageIndex != -1,
+        "Can't retrieve the backbuffer index without beginnig on a backbuffer");
     return mImageIndex;
 }
 
-void CommandList::BeginRenderPassOnBackbuffer(RenderPass *rp, std::vector<Framebuffer *> const &fb,
-                                              float const *clearColor)
+void CommandList::BeginRenderPassOnBackbuffer(
+    RenderPass *rp, std::vector<Framebuffer *> const &fb,
+    float const *clearColor)
 {
     if (mBackbufferAvailable == nullptr)
         mBackbufferAvailable = std::make_unique<GPUSynchronizationObject>();
@@ -301,19 +341,23 @@ void CommandList::BeginRenderPassOnBackbuffer(RenderPass *rp, std::vector<Frameb
     VkClearValue clearValue = {};
     memcpy(clearValue.color.float32, clearColor, sizeof(float) * 4);
 
-    auto pClearValue = (VkClearValue *)CopyToTemporaryStorage((u8 *)&clearValue, sizeof(clearValue));
-    ThrowIfFailed(pClearValue != nullptr, "Unable to copy clear color value to temporary storage");
+    auto pClearValue = (VkClearValue *)CopyToTemporaryStorage(
+        (u8 *)&clearValue, sizeof(clearValue));
+    ThrowIfFailed(pClearValue != nullptr,
+                  "Unable to copy clear color value to temporary storage");
     VkRenderPassBeginInfo rpInfo = {};
     {
         rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         rpInfo.renderPass = rp->mRenderpass;
         rpInfo.framebuffer = fb[mImageIndex]->mFramebuffer;
         rpInfo.renderArea.offset = {0, 0};
-        rpInfo.renderArea.extent = {fb[mImageIndex]->mWidth, fb[mImageIndex]->mHeight};
+        rpInfo.renderArea.extent = {fb[mImageIndex]->mWidth,
+                                    fb[mImageIndex]->mHeight};
         rpInfo.clearValueCount = 1;
         rpInfo.pClearValues = pClearValue;
     }
-    jnrCmdBeginRenderPass(mCommandBuffers[mActiveCommandIndex], &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+    jnrCmdBeginRenderPass(mCommandBuffers[mActiveCommandIndex], &rpInfo,
+                          VK_SUBPASS_CONTENTS_INLINE);
 }
 
 void CommandList::EndRenderPass()
@@ -321,7 +365,8 @@ void CommandList::EndRenderPass()
     jnrCmdEndRenderPass(mCommandBuffers[mActiveCommandIndex]);
 }
 
-void CommandList::BeginRenderingOnBackbuffer(float const backgroundColor[4])
+void CommandList::BeginRenderingOnBackbuffer(float const backgroundColor[4],
+                                             Image *depth, bool useStencil)
 {
     if (mBackbufferAvailable == nullptr)
         mBackbufferAvailable = std::make_unique<GPUSynchronizationObject>();
@@ -339,25 +384,62 @@ void CommandList::BeginRenderingOnBackbuffer(float const backgroundColor[4])
         TransitionBackbufferTo(ti);
     }
 
+    if (depth)
+    {
+        /* Transition image to depth */
+        TransitionInfo ti{};
+        {
+            ti.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            ti.newLayout =
+                useStencil ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                           : VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+            ti.srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            ti.dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        }
+        TransitionImageTo(depth, ti);
+    }
+
     VkClearValue clearValue{};
     memcpy(clearValue.color.float32, backgroundColor, sizeof(float) * 4);
     VkRenderingAttachmentInfo colorAttachment{};
     {
         colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
         colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        colorAttachment.imageView = renderer->GetSwapchainImageView(mImageIndex);
+        colorAttachment.imageView =
+            renderer->GetSwapchainImageView(mImageIndex);
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         colorAttachment.clearValue = clearValue;
+    }
+
+    VkImageAspectFlags depthAspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
+    depthAspectFlags |= useStencil ? VK_IMAGE_ASPECT_STENCIL_BIT : 0;
+    auto depthImageView = depth->GetImageView(depthAspectFlags);
+    VkRenderingAttachmentInfo depthAttachment{};
+    {
+        VkClearValue clearValue{};
+        clearValue.depthStencil.depth = 1.0f;
+        clearValue.depthStencil.stencil = 0;
+        depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        depthAttachment.imageLayout =
+            useStencil ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                       : VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+        depthAttachment.imageView = depthImageView.GetView();
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.clearValue = clearValue;
     }
     VkRenderingInfo renderingInfo{};
     {
         renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
         renderingInfo.colorAttachmentCount = 1;
         renderingInfo.pColorAttachments = &colorAttachment;
-        renderingInfo.pDepthAttachment = nullptr;
-        renderingInfo.pStencilAttachment = nullptr;
-        renderingInfo.renderArea = {.offset = VkOffset2D{.x = 0, .y = 0}, .extent = renderer->GetBackbufferExtent()};
+        renderingInfo.pDepthAttachment =
+            depth != nullptr ? &depthAttachment : nullptr;
+        renderingInfo.pStencilAttachment =
+            useStencil ? &depthAttachment : nullptr;
+        renderingInfo.renderArea = {.offset = VkOffset2D{.x = 0, .y = 0},
+                                    .extent = renderer->GetBackbufferExtent()};
         renderingInfo.viewMask = 0;
         renderingInfo.layerCount = 1;
     }
@@ -365,7 +447,9 @@ void CommandList::BeginRenderingOnBackbuffer(float const backgroundColor[4])
     jnrCmdBeginRendering(mCommandBuffers[mActiveCommandIndex], &renderingInfo);
 }
 
-void CommandList::BeginRenderingOnImage(Image *img, float const backgroundColor[4], Image *depth, bool useStencil)
+void CommandList::BeginRenderingOnImage(Image *img,
+                                        float const backgroundColor[4],
+                                        Image *depth, bool useStencil)
 {
     /* TODO: Maybe batch these transitions? */
     /* Transition the image to color attachment */
@@ -385,8 +469,9 @@ void CommandList::BeginRenderingOnImage(Image *img, float const backgroundColor[
         TransitionInfo ti{};
         {
             ti.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            ti.newLayout = useStencil ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-                                      : VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+            ti.newLayout =
+                useStencil ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                           : VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
             ti.srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             ti.dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         }
@@ -415,7 +500,8 @@ void CommandList::BeginRenderingOnImage(Image *img, float const backgroundColor[
         clearValue.depthStencil.stencil = 0;
         depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
         depthAttachment.imageLayout =
-            useStencil ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+            useStencil ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                       : VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
         depthAttachment.imageView = depthImageView.GetView();
         depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -426,9 +512,12 @@ void CommandList::BeginRenderingOnImage(Image *img, float const backgroundColor[
         renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
         renderingInfo.colorAttachmentCount = 1;
         renderingInfo.pColorAttachments = &colorAttachment;
-        renderingInfo.pDepthAttachment = depth != nullptr ? &depthAttachment : nullptr;
-        renderingInfo.pStencilAttachment = useStencil ? &depthAttachment : nullptr;
-        renderingInfo.renderArea = {.offset = VkOffset2D{.x = 0, .y = 0}, .extent = img->GetExtent2D()};
+        renderingInfo.pDepthAttachment =
+            depth != nullptr ? &depthAttachment : nullptr;
+        renderingInfo.pStencilAttachment =
+            useStencil ? &depthAttachment : nullptr;
+        renderingInfo.renderArea = {.offset = VkOffset2D{.x = 0, .y = 0},
+                                    .extent = img->GetExtent2D()};
         renderingInfo.viewMask = 0;
         renderingInfo.layerCount = 1;
     }
@@ -468,15 +557,17 @@ void CommandList::Submit(CPUSynchronizationObject *signalWhenFinished)
 
     if (mType == CommandListType::Graphics)
     {
-        vkThrowIfFailed(
-            jnrQueueSubmit(renderer->mGraphicsQueue, 1, &submitInfo,
-                           signalWhenFinished == nullptr ? VK_NULL_HANDLE : signalWhenFinished->GetFence()));
+        vkThrowIfFailed(jnrQueueSubmit(renderer->mGraphicsQueue, 1, &submitInfo,
+                                       signalWhenFinished == nullptr
+                                           ? VK_NULL_HANDLE
+                                           : signalWhenFinished->GetFence()));
     }
 }
 
 void CommandList::SubmitToScreen(CPUSynchronizationObject *signalWhenFinished)
 {
-    /*DSHOWINFO("Submitting command buffer ", (void *)mCommandBuffers[mActiveCommandIndex], " to the screen");*/
+    /*DSHOWINFO("Submitting command buffer ", (void
+     * *)mCommandBuffers[mActiveCommandIndex], " to the screen");*/
     if (mRenderingFinished == nullptr)
         mRenderingFinished = std::make_unique<GPUSynchronizationObject>();
 
@@ -486,7 +577,8 @@ void CommandList::SubmitToScreen(CPUSynchronizationObject *signalWhenFinished)
         VkSemaphore waitSemaphores[] = {mBackbufferAvailable->GetSemaphore()};
         VkSemaphore signalSemaphores[] = {mRenderingFinished->GetSemaphore()};
 
-        VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+        VkPipelineStageFlags waitStages[] = {
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
         VkSubmitInfo submitInfo{};
         {
@@ -504,7 +596,9 @@ void CommandList::SubmitToScreen(CPUSynchronizationObject *signalWhenFinished)
         {
             vkThrowIfFailed(
                 jnrQueueSubmit(renderer->mGraphicsQueue, 1, &submitInfo,
-                               signalWhenFinished == nullptr ? VK_NULL_HANDLE : signalWhenFinished->GetFence()));
+                               signalWhenFinished == nullptr
+                                   ? VK_NULL_HANDLE
+                                   : signalWhenFinished->GetFence()));
         }
     }
 
@@ -523,7 +617,8 @@ void CommandList::SubmitToScreen(CPUSynchronizationObject *signalWhenFinished)
             presentInfo.pImageIndices = imageIndices;
         }
 
-        vkThrowIfFailed(jnrQueuePresentKHR(renderer->mPresentQueue, &presentInfo));
+        vkThrowIfFailed(
+            jnrQueuePresentKHR(renderer->mPresentQueue, &presentInfo));
     }
 }
 
