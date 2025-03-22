@@ -7,6 +7,7 @@
 #include "Gameplay/Components/Mesh.h"
 #include "Gameplay/Components/RigidBody.h"
 #include "Gameplay/Components/Update.h"
+#include "Gameplay/PhysicsDebugDraw.h"
 #include "Gameplay/Systems/BasicRendering.h"
 #include "Gameplay/Systems/Physics.h"
 #include "Renderer/Vulkan/Buffer.h"
@@ -29,6 +30,10 @@ Game::Game(Vulkan::CommandList *initCommandList)
     InitPerFrameResources();
     InitScene(initCommandList);
     InitResources();
+#if DEBUG
+    mPhysicsDebug = PhysicsDebugDraw(&mBatchRenderer);
+    mPhysicsSystem.SetDebugInterface(&mPhysicsDebug);
+#endif /* DEBUG */
 }
 
 Game::~Game()
@@ -116,6 +121,7 @@ void Game::InitResources()
 void Game::OnResize()
 {
     mState.OnResize();
+    mBatchRenderer.OnResize();
 }
 
 Components::Mesh Game::InitGeometry(std::string_view path)
@@ -337,6 +343,7 @@ void Game::Render()
         f32 backgroundColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
         cmdList->BeginRenderingOnBackbuffer(backgroundColor);
         basicRenderSystem->Render(cmdList.get(), mRegistry, mEntities.size());
+        mBatchRenderer.Render(cmdList.get(), mCamera);
         cmdList->EndRendering();
     }
     cmdList->End();

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "LinearMath/btIDebugDraw.h"
 #include "btBulletCollisionCommon.h"
 #include "btBulletDynamicsCommon.h"
 
@@ -21,6 +22,11 @@ public:
 
 public:
     void Update(float dt, entt::registry &registry);
+
+    void SetDebugInterface(btIDebugDraw *debugInterface)
+    {
+        mWorld->setDebugDrawer(debugInterface);
+    }
 
 public:
     Components::RigidBody CreateRigidBody(Components::Base const &base,

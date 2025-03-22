@@ -13,18 +13,23 @@ class Buffer
     friend class DescriptorSet;
 
 public:
-    Buffer(u64 elementSize, u64 count, VkBufferUsageFlags usage, VmaAllocationCreateFlags allocationFlags = 0)
+    Buffer(u64 elementSize, u64 count, VkBufferUsageFlags usage,
+           VmaAllocationCreateFlags allocationFlags = 0)
         : mElementSize(elementSize), mCount(count)
     {
-        bool mappable = ((allocationFlags & VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT) != 0 ||
-                         (allocationFlags & VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT) != 0);
+        bool mappable =
+            ((allocationFlags & VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT) !=
+                 0 ||
+             (allocationFlags &
+              VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT) != 0);
 
         auto allocator = Renderer::Get()->GetAllocator();
 
         VkBufferCreateInfo bufferInfo{};
         {
             bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            bufferInfo.queueFamilyIndexCount = 1; /* TODO: If needed improve this */
+            bufferInfo.queueFamilyIndexCount =
+                1; /* TODO: If needed improve this */
             bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
             bufferInfo.size = elementSize * count;
             bufferInfo.usage = usage;
@@ -36,8 +41,9 @@ public:
             allocationInfo.flags = allocationFlags;
         }
 
-        vkThrowIfFailed(
-            vmaCreateBuffer(allocator, &bufferInfo, &allocationInfo, &mBuffer, &mAllocation, &mAllocationInfo));
+        vkThrowIfFailed(vmaCreateBuffer(allocator, &bufferInfo, &allocationInfo,
+                                        &mBuffer, &mAllocation,
+                                        &mAllocationInfo));
 
         if (mappable)
         {
@@ -49,28 +55,32 @@ public:
 
     void Copy(void *src)
     {
-        ThrowIfFailed(mData != nullptr, "In order to copy into a buffer, it must be mappable");
+        ThrowIfFailed(mData != nullptr,
+                      "In order to copy into a buffer, it must be mappable");
         memcpy(mData, src, mElementSize * mCount);
     }
 
     void *GetElement(u32 index = 0)
     {
         ThrowIfFailed(mData != nullptr,
-                      "In order to get the address of an element inside the buffer, it must be mappable");
+                      "In order to get the address of an element inside the "
+                      "buffer, it must be mappable");
         return (unsigned char *)mData + mElementSize * index;
     }
 
     void const *GetElement(u32 index = 0) const
     {
         ThrowIfFailed(mData != nullptr,
-                      "In order to get the address of an element inside the buffer, it must be mappable");
+                      "In order to get the address of an element inside the "
+                      "buffer, it must be mappable");
         return (unsigned char *)mData + mElementSize * index;
     }
 
     void *GetData()
     {
         ThrowIfFailed(mData != nullptr,
-                      "In order to get the address of an element inside the buffer, it must be mappable");
+                      "In order to get the address of an element inside the "
+                      "buffer, it must be mappable");
         return mData;
     }
 

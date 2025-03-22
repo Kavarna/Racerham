@@ -26,34 +26,6 @@ Physics::Physics()
         mDefaultCollisionConfiguration.get());
 
     mWorld->setGravity(btVector3(0.0f, -10.0f, 0.0f));
-
-    // btCollisionShape *groundShape = new btBoxShape(
-    //     btVector3(btScalar(50000.), btScalar(50.), btScalar(50000.)));
-    //
-    // btTransform groundTransform;
-    // groundTransform.setIdentity();
-    // groundTransform.setOrigin(btVector3(0, -56, 0));
-    //
-    // btScalar mass(0.);
-    //
-    // // rigidbody is dynamic if and only if mass is non zero, otherwise static
-    // bool isDynamic = (mass != 0.f);
-    //
-    // btVector3 localInertia(0, 0, 0);
-    // if (isDynamic)
-    //     groundShape->calculateLocalInertia(mass, localInertia);
-    //
-    // // using motionstate is optional, it provides interpolation capabilities,
-    // // and only synchronizes 'active' objects
-    // btDefaultMotionState *myMotionState =
-    //     new btDefaultMotionState(groundTransform);
-    // btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState,
-    //                                                 groundShape,
-    //                                                 localInertia);
-    // btRigidBody *body = new btRigidBody(rbInfo);
-    //
-    // // add the body to the dynamics world
-    // mWorld->addRigidBody(body);
 }
 
 Physics::~Physics()
@@ -74,9 +46,10 @@ Components::RigidBody Physics::CreateRigidBody(Components::Base const &base,
         std::make_unique<btBoxShape>(btVector3(1.0f, 1.0f, 1.0f));
 
     btTransform startTransform;
-    /* TODO: When physics debugging is available, check why this doesn't work */
     if (false)
     {
+        /* TODO: When physics debugging is available, check why this doesn't
+         * work */
         const float *worldMatrix = glm::value_ptr(base.world);
         startTransform.setFromOpenGLMatrix(worldMatrix);
     }
@@ -130,6 +103,10 @@ Components::RigidBody Physics::CreateRigidBody(Components::Base const &base,
 void Physics::Update(float dt, entt::registry &registry)
 {
     mWorld->stepSimulation(dt);
+    if (mWorld->getDebugDrawer())
+    {
+        mWorld->debugDrawWorld();
+    }
 
     auto rigidBodies = registry.view<Components::Base, Components::RigidBody>();
     for (auto [entity, base, rigidBody] : rigidBodies.each())

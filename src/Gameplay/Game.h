@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Gameplay/PhysicsDebugDraw.h"
 #include "Gameplay/Systems/BasicRendering.h"
 #include "Gameplay/Systems/Physics.h"
 #include "Gameplay/Systems/UpdateFrame.h"
@@ -13,10 +14,9 @@
 #include "Gameplay/Components/Mesh.h"
 #include "Gameplay/Entity.h"
 
+#include "Renderer/BatchRenderer.h"
 #include "Renderer/Vulkan/Buffer.h"
 #include "Renderer/Vulkan/CommandList.h"
-#include "Renderer/Vulkan/Pipeline.h"
-#include "Renderer/Vulkan/RootSignature.h"
 #include "Renderer/Vulkan/SynchronizationObjects.h"
 #include <string_view>
 
@@ -73,6 +73,9 @@ private:
     Systems::Physics mPhysicsSystem;
 
     Camera mCamera;
+
+    BatchRenderer mBatchRenderer;
+    PhysicsDebugDraw mPhysicsDebug;
 
     /* TODO: Ideally merge these two into a single class */
     entt::registry mRegistry;

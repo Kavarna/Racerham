@@ -37,6 +37,7 @@ game_srcs = [
   'src/Gameplay/Systems/BasicRendering.cpp',
   'src/Gameplay/Systems/Physics.cpp',
   'src/main.cpp',
+  'src/Renderer/BatchRenderer.cpp',
   'src/Renderer/Vulkan/CommandList.cpp',
   'src/Renderer/Vulkan/Image.cpp',
   'src/Renderer/Vulkan/LayoutTracker.cpp',
@@ -68,6 +69,8 @@ executable(
 shaders = [
   'src/Renderer/Vulkan/Shaders/basic.vert',
   'src/Renderer/Vulkan/Shaders/basic.frag',
+  'src/Renderer/Vulkan/Shaders/color.vert',
+  'src/Renderer/Vulkan/Shaders/color.frag',
 ]
 
 shaders_directory = bin_directory / 'Shaders'
