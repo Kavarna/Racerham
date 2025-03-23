@@ -13,31 +13,10 @@ namespace Systems
 namespace BasicRendering
 {
 
-struct SharedState
-{
-    friend class RenderSystem;
-
-public:
-    SharedState(u32 numInstances = Constants::MAX_IN_FLIGHT_FRAMES);
-
-    SharedState(const SharedState &) = delete;
-    SharedState(SharedState &&) = delete;
-    SharedState &operator=(const SharedState &) = delete;
-    SharedState &operator=(SharedState &&) = delete;
-
-public:
-    void OnResize();
-
-private:
-    std::unique_ptr<Vulkan::Pipeline> mPipeline;
-    std::unique_ptr<Vulkan::RootSignature> mRootSignature;
-    std::unique_ptr<Vulkan::DescriptorSet> mDescriptorSet;
-};
-
 class RenderSystem
 {
 public:
-    RenderSystem(SharedState *sharedState, u32 sharedStateIndex);
+    RenderSystem();
 
     RenderSystem(const RenderSystem &) = delete;
     RenderSystem(RenderSystem &&) = delete;
@@ -45,8 +24,13 @@ public:
     RenderSystem &operator=(RenderSystem &&) = delete;
 
 public:
-    void Render(Vulkan::CommandList *cmdList, entt::registry const &registry,
-                u32 objectCount);
+    void OnResize();
+    /**
+     * @brief Renders all the entities in registry. The output images must have
+     * been set before calling this.
+     */
+    void Render(Vulkan::CommandList *cmdList, u32 currentFrameIndex,
+                entt::registry const &registry, u32 objectCount);
     void UpdateCamera(Camera const &camera);
 
 public:
@@ -58,11 +42,13 @@ public:
     }
 
 private:
+    void StateInit();
     void ResizeWorldBufferIfNeeded(u32 objectCount);
 
 private:
-    SharedState *mSharedState;
-    u32 mSharedStateIndex = 0;
+    std::unique_ptr<Vulkan::Pipeline> mPipeline;
+    std::unique_ptr<Vulkan::RootSignature> mRootSignature;
+    std::unique_ptr<Vulkan::DescriptorSet> mDescriptorSet;
 
     Vulkan::Buffer *mVertexBuffer = nullptr;
     Vulkan::Buffer *mIndexBuffer = nullptr;

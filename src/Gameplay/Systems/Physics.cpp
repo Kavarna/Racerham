@@ -4,6 +4,7 @@
 #include "BulletDynamics/Dynamics/btRigidBody.h"
 #include "Check.h"
 #include "Gameplay/Components/RigidBody.h"
+#include "Gameplay/Game.h"
 #include "LinearMath/btDefaultMotionState.h"
 #include "LinearMath/btTransform.h"
 #include "entt/entity/fwd.hpp"
@@ -103,7 +104,7 @@ Components::RigidBody Physics::CreateRigidBody(Components::Base const &base,
 void Physics::Update(float dt, entt::registry &registry)
 {
     mWorld->stepSimulation(dt);
-    if (mWorld->getDebugDrawer())
+    if (Game::Get()->GetGameState().isDeveloper)
     {
         mWorld->debugDrawWorld();
     }

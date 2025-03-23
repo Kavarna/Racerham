@@ -8,6 +8,7 @@
 #include "Gameplay/Components/Update.h"
 #include "Renderer/ShaderStructs.h"
 #include "Renderer/Vulkan/CommandList.h"
+#include "Utils/Constants.h"
 #include "Utils/Vertex.h"
 
 namespace Systems
@@ -15,14 +16,23 @@ namespace Systems
 namespace BasicRendering
 {
 
-SharedState::SharedState(u32 numInstances)
+RenderSystem::RenderSystem()
+{
+
+    mPerFrameBuffer = std::make_unique<Vulkan::Buffer>(
+        sizeof(glm::mat4x4), 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+    StateInit();
+}
+
+void RenderSystem::StateInit()
 {
     /* Create a simple root signature*/
     mDescriptorSet = std::make_unique<Vulkan::DescriptorSet>();
     {
         mDescriptorSet->AddStorageBuffer(0, 1);
         mDescriptorSet->AddInputBuffer(1, 1);
-        mDescriptorSet->Bake(numInstances);
+        mDescriptorSet->Bake(Constants::MAX_IN_FLIGHT_FRAMES);
     }
     mRootSignature = std::make_unique<Vulkan::RootSignature>();
     {
@@ -33,7 +43,7 @@ SharedState::SharedState(u32 numInstances)
     OnResize();
 }
 
-void SharedState::OnResize()
+void RenderSystem::OnResize()
 {
     /* Create simple mPipeline */
     glm::vec2 windowDimensions = Application::Get()->GetWindowDimensions();
@@ -105,18 +115,11 @@ void SharedState::OnResize()
         depthState.minDepthBounds = 0.0f;
         depthState.maxDepthBounds = 1.0f;
     }
+    /* Render directly to the backbuffer and depth stencil but they must have
+     * been bound before actully rendering */
     mPipeline->AddBackbufferColorOutput();
     mPipeline->SetBackbufferDepthStencilOutput();
     mPipeline->Bake();
-}
-
-RenderSystem::RenderSystem(SharedState *sharedState, u32 sharedStateIndex)
-    : mSharedState(sharedState), mSharedStateIndex(sharedStateIndex)
-{
-
-    mPerFrameBuffer = std::make_unique<Vulkan::Buffer>(
-        sizeof(glm::mat4x4), 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 }
 
 void RenderSystem::UpdateCamera(Camera const &camera)
@@ -138,7 +141,7 @@ void RenderSystem::ResizeWorldBufferIfNeeded(u32 objectCount)
     }
 }
 
-void RenderSystem::Render(Vulkan::CommandList *cmdList,
+void RenderSystem::Render(Vulkan::CommandList *cmdList, u32 currentFrameIndex,
                           entt::registry const &registry, u32 objectCount)
 {
     ResizeWorldBufferIfNeeded(objectCount);
@@ -153,8 +156,8 @@ void RenderSystem::Render(Vulkan::CommandList *cmdList,
                 update.bufferIndex);
             info->world = base.world;
             mIsDirty = true;
-            // SHOWINFO("Update world for object ", update.bufferIndex,
-            //          " because dirty frames is ", update.dirtyFrames);
+            SHOWINFO("Update world for object ", update.bufferIndex,
+                     " because dirty frames is ", update.dirtyFrames);
         }
     }
 
@@ -166,25 +169,23 @@ void RenderSystem::Render(Vulkan::CommandList *cmdList,
         /* TODO: To research if recording everything in a secondary command
          * buffer and just executing that instead of re-recording makes sense */
 
-        mSharedState->mDescriptorSet->SetActiveInstance(mSharedStateIndex);
-        mSharedState->mDescriptorSet->BindStorageBuffer(mWorldBuffer.get(), 0);
-        mSharedState->mDescriptorSet->BindInputBuffer(mPerFrameBuffer.get(), 1);
+        mDescriptorSet->SetActiveInstance(currentFrameIndex);
+        mDescriptorSet->BindStorageBuffer(mWorldBuffer.get(), 0);
+        mDescriptorSet->BindInputBuffer(mPerFrameBuffer.get(), 1);
     }
 
     cmdList->BindVertexBuffer(mVertexBuffer, 0);
     cmdList->BindIndexBuffer(mIndexBuffer);
-    cmdList->BindPipeline(mSharedState->mPipeline.get());
-    cmdList->BindDescriptorSet(mSharedState->mDescriptorSet.get(),
-                               mSharedStateIndex,
-                               mSharedState->mRootSignature.get());
+    cmdList->BindPipeline(mPipeline.get());
+    cmdList->BindDescriptorSet(mDescriptorSet.get(), currentFrameIndex,
+                               mRootSignature.get());
 
     auto meshes =
         registry.view<const Components::Update, const Components::Mesh>();
     for (auto const &[entity, update, mesh] : meshes.each())
     {
         u32 index = update.bufferIndex;
-        cmdList->BindPushRange<u32>(mSharedState->mRootSignature.get(), 0, 1,
-                                    &index);
+        cmdList->BindPushRange<u32>(mRootSignature.get(), 0, 1, &index);
         cmdList->DrawIndexedInstanced(mesh.indices.indexCount,
                                       mesh.indices.firstIndex,
                                       mesh.indices.firstVertex);

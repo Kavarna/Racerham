@@ -54,6 +54,7 @@ public:
 
     virtual int getDebugMode() const override
     {
+        return 0;
         return (1 << 16) - 1;
     }
 

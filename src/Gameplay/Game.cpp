@@ -32,10 +32,12 @@ Game::Game(Vulkan::CommandList *initCommandList)
     InitPerFrameResources();
     InitScene(initCommandList);
     InitResources();
-#if DEBUG
-    mPhysicsDebug = PhysicsDebugDraw(&mBatchRenderer);
-    mPhysicsSystem.SetDebugInterface(&mPhysicsDebug);
-#endif /* DEBUG */
+
+    if (mState.isDeveloper)
+    {
+        mPhysicsDebug = PhysicsDebugDraw(&mBatchRenderer);
+        mPhysicsSystem.SetDebugInterface(&mPhysicsDebug);
+    }
 }
 
 Game::~Game()
@@ -56,8 +58,6 @@ void Game::InitPerFrameResources()
         mPerFrameResources[i].commandList->Init();
         mPerFrameResources[i].isCommandListDone =
             std::make_unique<Vulkan::CPUSynchronizationObject>(true);
-        mPerFrameResources[i].basicRenderSystem =
-            std::make_unique<Systems::BasicRendering::RenderSystem>(&mState, i);
     }
 }
 
@@ -105,11 +105,8 @@ void Game::BakeRenderingBuffers(Vulkan::CommandList *initCommandList)
     initCommandList->AddLocalBuffer(std::move(stagingVertexBuffer));
     initCommandList->AddLocalBuffer(std::move(stagingIndexBuffer));
 
-    for (u32 i = 0; i < Constants::MAX_IN_FLIGHT_FRAMES; ++i)
-    {
-        mPerFrameResources[i].basicRenderSystem->SetRenderingBuffers(
-            mGlobalVertexBuffer.get(), mGlobalIndexBuffer.get());
-    }
+    mBasicRenderSystem.SetRenderingBuffers(mGlobalVertexBuffer.get(),
+                                           mGlobalIndexBuffer.get());
 }
 
 void Game::InitResources()
@@ -132,7 +129,7 @@ void Game::InitResources()
 
 void Game::OnResize()
 {
-    mState.OnResize();
+    mBasicRenderSystem.OnResize();
     mBatchRenderer.OnResize();
 }
 
@@ -334,7 +331,7 @@ void Game::Update(float dt)
     /* Update the camera */
     if (mCamera.Update())
     {
-        perFrameResources.basicRenderSystem->UpdateCamera(mCamera);
+        mBasicRenderSystem.UpdateCamera(mCamera);
     }
 
     mPhysicsSystem.Update(dt, mRegistry);
@@ -344,8 +341,6 @@ void Game::Render()
 {
     auto &cmdList = mPerFrameResources[mCurrentFrame].commandList;
     auto &isCmdListDone = mPerFrameResources[mCurrentFrame].isCommandListDone;
-    auto &basicRenderSystem =
-        mPerFrameResources[mCurrentFrame].basicRenderSystem;
 
     isCmdListDone->Wait();
     isCmdListDone->Reset();
@@ -355,7 +350,8 @@ void Game::Render()
         f32 backgroundColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
         cmdList->BeginRenderingOnBackbuffer(backgroundColor, mDepthImage.get(),
                                             false);
-        basicRenderSystem->Render(cmdList.get(), mRegistry, mEntities.size());
+        mBasicRenderSystem.Render(cmdList.get(), mCurrentFrame, mRegistry,
+                                  mEntities.size());
         mBatchRenderer.Render(cmdList.get(), mCamera);
         cmdList->EndRendering();
     }

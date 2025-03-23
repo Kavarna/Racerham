@@ -20,6 +20,16 @@
 #include "Renderer/Vulkan/SynchronizationObjects.h"
 #include <string_view>
 
+struct GameState
+{
+    bool isDeveloper =
+#if DEBUG
+        true;
+#else
+        false;
+#endif /* DEBUG */
+};
+
 class Game : public Jnrlib::ISingletone<Game>
 {
     MAKE_SINGLETONE_CAPABLE(Game);
@@ -33,6 +43,11 @@ public:
 
     void Update(float dt);
     void Render();
+
+    GameState const &GetGameState() const
+    {
+        return mState;
+    }
 
 private:
     void InitPerFrameResources();
@@ -54,15 +69,12 @@ private:
     {
         std::unique_ptr<Vulkan::CommandList> commandList;
         std::unique_ptr<Vulkan::CPUSynchronizationObject> isCommandListDone;
-
-        std::unique_ptr<Systems::BasicRendering::RenderSystem>
-            basicRenderSystem;
     };
     std::array<PerFrameResource, Constants::MAX_IN_FLIGHT_FRAMES>
         mPerFrameResources;
     u32 mCurrentFrame = 0;
 
-    Systems::BasicRendering::SharedState mState;
+    GameState mState;
 
     std::unique_ptr<Vulkan::Buffer> mGlobalVertexBuffer;
     std::unique_ptr<Vulkan::Buffer> mGlobalIndexBuffer;
@@ -71,6 +83,7 @@ private:
 
     Systems::UpdateFrame mUpdateFrameSystem;
     Systems::Physics mPhysicsSystem;
+    Systems::BasicRendering::RenderSystem mBasicRenderSystem;
 
     std::unique_ptr<Vulkan::Image> mDepthImage;
 
