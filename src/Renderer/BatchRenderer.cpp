@@ -10,11 +10,10 @@
 void BatchRenderer::InitVulkanState()
 {
     /* Create a simple root signature*/
-    mRootSignature = std::make_unique<Vulkan::RootSignature>();
     {
-        mRootSignature->AddPushRange<glm::mat4x4>(0);
+        mRootSignature.AddPushRange<glm::mat4x4>(0);
     }
-    mRootSignature->Bake();
+    mRootSignature.Bake();
     OnResize();
 }
 
@@ -37,27 +36,27 @@ void BatchRenderer::OnResize()
         scissor.extent = {(u32)windowDimensions.x, (u32)windowDimensions.y};
     }
 
-    mPipeline = std::make_unique<Vulkan::Pipeline>("SimplePipeline");
+    mPipeline.Clear();
     {
-        mPipeline->SetRootSignature(mRootSignature.get());
-        mPipeline->AddShader("Shaders/color.vert.spv");
-        mPipeline->AddShader("Shaders/color.frag.spv");
+        mPipeline.SetRootSignature(&mRootSignature);
+        mPipeline.AddShader("Shaders/color.vert.spv");
+        mPipeline.AddShader("Shaders/color.frag.spv");
     }
     {
-        auto &viewportState = mPipeline->GetViewportStateCreateInfo();
+        auto &viewportState = mPipeline.GetViewportStateCreateInfo();
         viewportState.viewportCount = 1;
         viewportState.pViewports = &viewport;
         viewportState.scissorCount = 1;
         viewportState.pScissors = &scissor;
     }
     {
-        auto &rasterizationState = mPipeline->GetRasterizationStateCreateInfo();
+        auto &rasterizationState = mPipeline.GetRasterizationStateCreateInfo();
         rasterizationState.cullMode = VkCullModeFlagBits::VK_CULL_MODE_NONE;
         rasterizationState.lineWidth = 3.0f;
     }
     VkPipelineColorBlendAttachmentState attachmentInfo{};
     {
-        auto &blendState = mPipeline->GetColorBlendStateCreateInfo();
+        auto &blendState = mPipeline.GetColorBlendStateCreateInfo();
         attachmentInfo.blendEnable = VK_FALSE;
         attachmentInfo.colorWriteMask =
             VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
@@ -71,7 +70,7 @@ void BatchRenderer::OnResize()
     auto vertexPositionBindingDescription =
         VertexPositionColor::GetInputBindingDescription();
     {
-        auto &vertexInput = mPipeline->GetVertexInputStateCreateInfo();
+        auto &vertexInput = mPipeline.GetVertexInputStateCreateInfo();
         vertexInput.vertexAttributeDescriptionCount =
             (u32)vertexPositionAttributeDescription.size();
         vertexInput.pVertexAttributeDescriptions =
@@ -82,7 +81,7 @@ void BatchRenderer::OnResize()
             vertexPositionBindingDescription.data();
     }
     {
-        auto &depthState = mPipeline->GetDepthStencilStateCreateInfo();
+        auto &depthState = mPipeline.GetDepthStencilStateCreateInfo();
         depthState.depthTestEnable = VK_TRUE;
         depthState.depthWriteEnable = VK_TRUE;
         depthState.depthBoundsTestEnable = VK_TRUE;
@@ -91,54 +90,55 @@ void BatchRenderer::OnResize()
         depthState.minDepthBounds = 0.0f;
         depthState.maxDepthBounds = 1.0f;
     }
-    mPipeline->GetInputAssemblyStateCreateInfo().topology =
+    mPipeline.GetInputAssemblyStateCreateInfo().topology =
         VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
 
-    mPipeline->AddBackbufferColorOutput();
-    mPipeline->SetBackbufferDepthStencilOutput();
-    mPipeline->Bake();
+    mPipeline.AddBackbufferColorOutput();
+    mPipeline.SetBackbufferDepthStencilOutput();
+    mPipeline.Bake();
 }
 
 void BatchRenderer::Resize(u32 newCount)
 {
-    auto newBuffer = std::make_unique<Vulkan::Buffer>(
-        sizeof(VertexPositionColor), newCount,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-    if (mBuffer)
+    auto newBuffer =
+        Vulkan::Buffer(sizeof(VertexPositionColor), newCount,
+                       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+    if (mVertexBuffer.GetCount())
     {
-        for (u32 i = 0; i < mBuffer->GetCount(); ++i)
+        for (u32 i = 0; i < mVertexBuffer.GetCount(); ++i)
         {
-            auto dst = newBuffer->GetElement(i);
-            auto src = mBuffer->GetElement(i);
-            memcpy(dst, src, mBuffer->GetElementSize());
+            auto dst = newBuffer.GetElement(i);
+            auto src = mVertexBuffer.GetElement(i);
+            memcpy(dst, src, mVertexBuffer.GetElementSize());
         }
     }
-    mBuffer = std::move(newBuffer);
+    mVertexBuffer = std::move(newBuffer);
 }
 
-void BatchRenderer::Render(Vulkan::CommandList *cmdList, Camera const &camera)
+void BatchRenderer::Render(Vulkan::CommandList &cmdList, Camera const &camera)
 {
     auto viewProj = camera.GetProjection() * camera.GetView();
 
-    cmdList->BindPipeline(mPipeline.get());
-    cmdList->BindVertexBuffer(mBuffer.get(), 0);
-    cmdList->BindPushRange<glm::mat4x4>(mRootSignature.get(), 0, 1, &viewProj);
-    cmdList->Draw(mVertexCount, 0);
+    cmdList.BindPipeline(mPipeline);
+    cmdList.BindVertexBuffer(mVertexBuffer, 0);
+    cmdList.BindPushRange<glm::mat4x4>(mRootSignature, 0, 1, &viewProj);
+    cmdList.Draw(mVertexCount, 0);
 
     Clear();
 }
 
 void BatchRenderer::AddVertex(VertexPositionColor const &vertex)
 {
-    if (mVertexCount > mBuffer->GetCount())
+    if (mVertexCount > mVertexBuffer.GetCount())
     {
-        Resize(mBuffer->GetCount() * 2);
+        Resize(mVertexBuffer.GetCount() * 2);
         AddVertex(vertex);
         return;
     }
 
-    auto *element = (VertexPositionColor *)mBuffer->GetElement(mVertexCount);
+    auto *element =
+        (VertexPositionColor *)mVertexBuffer.GetElement(mVertexCount);
     *element = vertex;
     mVertexCount++;
 }

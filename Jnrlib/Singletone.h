@@ -5,6 +5,7 @@
 #include "TypeMatching.h"
 #include <memory>
 #include <mutex>
+#include <utility>
 
 namespace Jnrlib
 {
@@ -18,13 +19,16 @@ protected:
     };
 
 public:
-    template <typename... Args> constexpr static type *Get(Args... args)
+    template <typename... Args> constexpr static type *Get(Args &&...args)
     {
         if constexpr (sizeof...(Args) == 0)
         {
             if constexpr (IsDefaultConstructible<type>::value)
             {
-                std::call_once(m_singletoneFlags, [&] { m_singletoneInstance = new type(args...); });
+                std::call_once(m_singletoneFlags, [&] {
+                    m_singletoneInstance =
+                        new type(std::forward<Args>(args)...);
+                });
                 return m_singletoneInstance;
             }
             else
@@ -42,7 +46,9 @@ public:
             {
                 throw Exceptions::SingletoneNotUniqueAttempt();
             }
-            std::call_once(m_singletoneFlags, [&] { m_singletoneInstance = new type(args...); });
+            std::call_once(m_singletoneFlags, [&] {
+                m_singletoneInstance = new type(std::forward<Args>(args)...);
+            });
             return m_singletoneInstance;
         }
     }
@@ -51,8 +57,9 @@ public:
     {
         if (m_singletoneInstance)
         {
-            auto ptr = m_singletoneInstance; // If we do it this way, we can safely
-                                             // call reset() from destructor too
+            auto ptr =
+                m_singletoneInstance; // If we do it this way, we can safely
+                                      // call reset() from destructor too
             m_singletoneInstance = nullptr;
             delete ptr;
         }
@@ -64,9 +71,11 @@ private:
 };
 } // namespace Jnrlib
 
-#define MAKE_SINGLETONE_CAPABLE(name)                                                                                  \
-    friend class Jnrlib::ISingletone<name>;                                                                            \
+#define MAKE_SINGLETONE_CAPABLE(name)                                          \
+    friend class Jnrlib::ISingletone<name>;                                    \
     friend struct IsDefaultConstructible<name>;
 
-template <typename type> type *Jnrlib::ISingletone<type>::m_singletoneInstance = nullptr;
-template <typename type> std::once_flag Jnrlib::ISingletone<type>::m_singletoneFlags;
+template <typename type>
+type *Jnrlib::ISingletone<type>::m_singletoneInstance = nullptr;
+template <typename type>
+std::once_flag Jnrlib::ISingletone<type>::m_singletoneFlags;

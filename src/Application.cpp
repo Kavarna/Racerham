@@ -181,7 +181,7 @@ void Application::PostInit()
     Vulkan::CommandList cmdList(Vulkan::CommandListType::Graphics);
     cmdList.Init();
     cmdList.Begin();
-    Game::Get(&cmdList);
+    Game::Get(cmdList);
     cmdList.End();
     cmdList.SubmitAndWait();
 }

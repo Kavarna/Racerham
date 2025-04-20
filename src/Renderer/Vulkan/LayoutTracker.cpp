@@ -16,19 +16,21 @@ LayoutTracker::~LayoutTracker()
 {
 }
 
-void LayoutTracker::TransitionBackBufferImage(u32 index, VkImageLayout newLayout)
+void LayoutTracker::TransitionBackBufferImage(u32 index,
+                                              VkImageLayout newLayout)
 {
     mBackbufferLayouts[index] = newLayout;
 }
 
-void LayoutTracker::TransitionImage(Image *img, VkImageLayout newLayout)
+void LayoutTracker::TransitionImage(Image &img, VkImageLayout newLayout)
 {
-    mImageLayouts[img] = newLayout;
+    mImageLayouts[&img] = newLayout;
 }
 
 VkImageLayout LayoutTracker::GetBackbufferImageLayout(u32 index)
 {
-    if (auto it = mBackbufferLayouts.find(index); it != mBackbufferLayouts.end())
+    if (auto it = mBackbufferLayouts.find(index);
+        it != mBackbufferLayouts.end())
         return it->second;
 
     auto renderer = Renderer::Get();
@@ -36,13 +38,13 @@ VkImageLayout LayoutTracker::GetBackbufferImageLayout(u32 index)
     return renderer->mSwapchainImageLayouts[index];
 }
 
-VkImageLayout LayoutTracker::GetImageLayout(Image *img)
+VkImageLayout LayoutTracker::GetImageLayout(Image &img)
 {
-    if (auto it = mImageLayouts.find(img); it != mImageLayouts.end())
+    if (auto it = mImageLayouts.find(&img); it != mImageLayouts.end())
         return it->second;
 
-    mImageLayouts[img] = img->mLayout;
-    return img->mLayout;
+    mImageLayouts[&img] = img.mLayout;
+    return img.mLayout;
 }
 
 void LayoutTracker::Flush()

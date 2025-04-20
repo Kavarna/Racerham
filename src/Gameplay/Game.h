@@ -4,6 +4,7 @@
 #include "Gameplay/Systems/BasicRendering.h"
 #include "Gameplay/Systems/Physics.h"
 #include "Gameplay/Systems/UpdateFrame.h"
+#include "MemoryArena.h"
 #include "Singletone.h"
 #include "entt/entt.hpp"
 
@@ -35,7 +36,7 @@ class Game : public Jnrlib::ISingletone<Game>
     MAKE_SINGLETONE_CAPABLE(Game);
 
 private:
-    Game(Vulkan::CommandList *initCommandList);
+    Game(Vulkan::CommandList &initCommandList);
     ~Game();
 
 public:
@@ -50,16 +51,13 @@ public:
     }
 
 private:
-    void InitPerFrameResources();
-    void InitScene(Vulkan::CommandList *initCommandList);
-    void InitResources();
-
-    void DestroyFrameResources();
+    void InitScene(Vulkan::CommandList &initCommandList);
+    void InitSizeDependentResources();
 
     Components::Mesh InitGeometry(std::string_view path);
 
 private:
-    void BakeRenderingBuffers(Vulkan::CommandList *initCommandList);
+    void BakeRenderingBuffers(Vulkan::CommandList &initCommandList);
 
     Entity *AddTestEntity(std::string_view name);
     Entity *AddGround();
@@ -67,8 +65,15 @@ private:
 private:
     struct PerFrameResource
     {
-        std::unique_ptr<Vulkan::CommandList> commandList;
-        std::unique_ptr<Vulkan::CPUSynchronizationObject> isCommandListDone;
+        Vulkan::CommandList commandList;
+        Vulkan::CPUSynchronizationObject isCommandListDone;
+
+        PerFrameResource()
+            : commandList(Vulkan::CommandListType::Graphics),
+              isCommandListDone(true)
+        {
+            commandList.Init();
+        }
     };
     std::array<PerFrameResource, Constants::MAX_IN_FLIGHT_FRAMES>
         mPerFrameResources;
@@ -76,8 +81,8 @@ private:
 
     GameState mState;
 
-    std::unique_ptr<Vulkan::Buffer> mGlobalVertexBuffer;
-    std::unique_ptr<Vulkan::Buffer> mGlobalIndexBuffer;
+    Vulkan::Buffer mGlobalVertexBuffer;
+    Vulkan::Buffer mGlobalIndexBuffer;
     std::vector<VertexPositionNormal> mStagedVertexBuffer;
     std::vector<u32> mStagedIndexBuffer;
 
@@ -85,7 +90,7 @@ private:
     Systems::Physics mPhysicsSystem;
     Systems::BasicRendering::RenderSystem mBasicRenderSystem;
 
-    std::unique_ptr<Vulkan::Image> mDepthImage;
+    Vulkan::Image mDepthImage;
 
     Camera mCamera;
 
@@ -94,5 +99,6 @@ private:
 
     /* TODO: Ideally merge these two into a single class */
     entt::registry mRegistry;
-    std::vector<std::unique_ptr<Entity>> mEntities;
+    std::vector<Entity *> mEntities;
+    MemoryArena<1024, Entity> mEntityArena;
 };

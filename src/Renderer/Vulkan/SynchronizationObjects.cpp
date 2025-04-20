@@ -1,5 +1,6 @@
 #include "SynchronizationObjects.h"
 #include "Renderer.h"
+#include "vulkan/vulkan_core.h"
 
 using namespace Vulkan;
 
@@ -11,18 +12,17 @@ GPUSynchronizationObject::GPUSynchronizationObject()
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
         semaphoreInfo.flags = 0;
     }
-    vkThrowIfFailed(jnrCreateSemaphore(device, &semaphoreInfo, nullptr, &mSemaphore));
+    vkThrowIfFailed(
+        jnrCreateSemaphore(device, &semaphoreInfo, nullptr, &mSemaphore));
 }
 
 GPUSynchronizationObject::~GPUSynchronizationObject()
 {
     auto device = Renderer::Get()->GetDevice();
-    jnrDestroySemaphore(device, mSemaphore, nullptr);
-}
-
-VkSemaphore GPUSynchronizationObject::GetSemaphore()
-{
-    return mSemaphore;
+    if (mSemaphore != VK_NULL_HANDLE)
+    {
+        jnrDestroySemaphore(device, mSemaphore, nullptr);
+    }
 }
 
 CPUSynchronizationObject::CPUSynchronizationObject(bool signaled)
@@ -39,12 +39,11 @@ CPUSynchronizationObject::CPUSynchronizationObject(bool signaled)
 CPUSynchronizationObject::~CPUSynchronizationObject()
 {
     auto device = Renderer::Get()->GetDevice();
-    jnrDestroyFence(device, mFence, nullptr);
-}
+    if (mFence != VK_NULL_HANDLE)
+    {
 
-VkFence CPUSynchronizationObject::GetFence()
-{
-    return mFence;
+        jnrDestroyFence(device, mFence, nullptr);
+    }
 }
 
 void CPUSynchronizationObject::Wait()

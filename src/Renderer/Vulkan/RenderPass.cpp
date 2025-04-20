@@ -4,6 +4,8 @@
 
 using namespace Vulkan;
 
+#ifdef USE_RENDERPASS
+
 RenderPass::RenderPass()
 {
     ResizeReferences(1);
@@ -213,3 +215,5 @@ void Framebuffer::Bake(u32 width, u32 height, RenderPass *renderpass)
     vkThrowIfFailed(
         jnrCreateFramebuffer(device, &framebufferInfo, nullptr, &mFramebuffer));
 }
+
+#endif /* USE_RENDERPASS */

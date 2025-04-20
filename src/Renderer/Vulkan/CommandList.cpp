@@ -72,7 +72,6 @@ void CommandList::Begin()
     {
         /* Reset current recording info */
         mImageIndex = -1;
-        mTemporaryStorageOffset = 0;
     }
 
     /* DSHOWINFO("[", (void *)mCommandBuffers[mActiveCommandIndex], "] Start
@@ -107,49 +106,53 @@ void CommandList::End()
      * recording command buffer");*/
 }
 
-void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer *dst, Vulkan::Buffer *src)
+void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer &dst,
+                                     Vulkan::Buffer const &src)
 {
     CopyBuffer(dst, 0, src, 0);
 }
 
-void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer *dst, u32 dstOffset,
-                                     Vulkan::Buffer *src)
+void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer &dst, u32 dstOffset,
+                                     Vulkan::Buffer const &src)
 {
     CopyBuffer(dst, dstOffset, src, 0);
 }
 
-void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer *dst, u32 dstOffset,
-                                     Vulkan::Buffer *src, u32 srcOffset)
+void Vulkan::CommandList::CopyBuffer(Vulkan::Buffer &dst, u32 dstOffset,
+                                     Vulkan::Buffer const &src, u32 srcOffset)
 {
-    ThrowIfFailed(dst->mCount >= src->mCount,
+    ThrowIfFailed(dst.mCount >= src.mCount,
                   "Cannot copy a larger buffer into a smaller one");
 
     VkBufferCopy copyInfo{};
     {
         copyInfo.srcOffset = srcOffset;
         copyInfo.dstOffset = dstOffset;
-        copyInfo.size = src->GetElementSize() * src->mCount;
+        copyInfo.size = src.GetElementSize() * src.mCount;
     }
-    jnrCmdCopyBuffer(mCommandBuffers[mActiveCommandIndex], src->mBuffer,
-                     dst->mBuffer, 1, &copyInfo);
+    jnrCmdCopyBuffer(mCommandBuffers[mActiveCommandIndex], src.mBuffer,
+                     dst.mBuffer, 1, &copyInfo);
 }
 
-void Vulkan::CommandList::BindVertexBuffer(Vulkan::Buffer const *buffer,
+void Vulkan::CommandList::BindVertexBuffer(Vulkan::Buffer const &buffer,
                                            u32 firstIndex)
 {
     VkDeviceSize offsets[] = {0};
     jnrCmdBindVertexBuffers(mCommandBuffers[mActiveCommandIndex], firstIndex, 1,
-                            &buffer->mBuffer, offsets);
+                            &buffer.mBuffer, offsets);
 }
 
-void Vulkan::CommandList::BindIndexBuffer(Vulkan::Buffer const *buffer)
+void Vulkan::CommandList::BindIndexBuffer(Vulkan::Buffer const &buffer)
 {
     VkIndexType indexType = VK_INDEX_TYPE_NONE_KHR;
-    if (buffer->GetElementSize() == sizeof(u32))
+    if (buffer.GetElementSize() == sizeof(u32))
         indexType = VK_INDEX_TYPE_UINT32;
-    else if (buffer->GetElementSize() == sizeof(u16))
+    else if (buffer.GetElementSize() == sizeof(u16))
         indexType = VK_INDEX_TYPE_UINT16;
-    jnrCmdBindIndexBuffer(mCommandBuffers[mActiveCommandIndex], buffer->mBuffer,
+    else
+        CHECK_FATAL(false, "Invalid index buffer size");
+
+    jnrCmdBindIndexBuffer(mCommandBuffers[mActiveCommandIndex], buffer.mBuffer,
                           0, indexType);
 }
 
@@ -166,20 +169,20 @@ void Vulkan::CommandList::DrawIndexedInstanced(u32 indexCount, u32 firstIndex,
                       firstIndex, vertexOffset, 0);
 }
 
-void CommandList::BindPipeline(Pipeline *pipeline)
+void CommandList::BindPipeline(Pipeline &pipeline)
 {
     jnrCmdBindPipeline(mCommandBuffers[mActiveCommandIndex],
-                       VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->mPipeline);
+                       VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.mPipeline);
 }
 
-void CommandList::BindDescriptorSet(DescriptorSet *set,
+void CommandList::BindDescriptorSet(DescriptorSet &set,
                                     u32 descriptorSetInstance,
-                                    RootSignature *rootSignature)
+                                    RootSignature &rootSignature)
 {
     jnrCmdBindDescriptorSets(
         mCommandBuffers[mActiveCommandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS,
-        rootSignature->mPipelineLayout, 0, 1,
-        &set->mDescriptorSets[descriptorSetInstance], 0, nullptr);
+        rootSignature.mPipelineLayout, 0, 1,
+        &set.mDescriptorSets[descriptorSetInstance], 0, nullptr);
 }
 
 void CommandList::SetScissor(std::vector<VkRect2D> const &scissors)
@@ -252,7 +255,7 @@ void CommandList::TransitionImageTo(Image *img,
         imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         imageMemoryBarrier.srcAccessMask = transitionInfo.srcAccessMask;
         imageMemoryBarrier.dstAccessMask = transitionInfo.dstAccessMask;
-        imageMemoryBarrier.oldLayout = mLayoutTracker.GetImageLayout(img);
+        imageMemoryBarrier.oldLayout = mLayoutTracker.GetImageLayout(*img);
         imageMemoryBarrier.newLayout = transitionInfo.newLayout;
         imageMemoryBarrier.image = img->mImage;
 
@@ -275,7 +278,7 @@ void CommandList::TransitionImageTo(Image *img,
                           transitionInfo.srcStage, transitionInfo.dstStage, 0,
                           0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
 
-    mLayoutTracker.TransitionImage(img, transitionInfo.newLayout);
+    mLayoutTracker.TransitionImage(*img, transitionInfo.newLayout);
 
     /*DSHOWINFO("[", (void *)mCommandBuffers[mActiveCommandIndex], "]
        Transitioning image ", img->mImage, " from layout
@@ -317,7 +320,7 @@ void CommandList::CopyWholeBufferToImage(Image *image, Buffer *buffer)
     }
     jnrCmdCopyBufferToImage(mCommandBuffers[mActiveCommandIndex],
                             buffer->mBuffer, image->mImage,
-                            mLayoutTracker.GetImageLayout(image), 1, &region);
+                            mLayoutTracker.GetImageLayout(*image), 1, &region);
 }
 
 u32 CommandList::GetCurrentBackbufferIndex()
@@ -328,23 +331,22 @@ u32 CommandList::GetCurrentBackbufferIndex()
     return mImageIndex;
 }
 
+#if USE_RENDERPASS
 void CommandList::BeginRenderPassOnBackbuffer(
     RenderPass *rp, std::vector<Framebuffer *> const &fb,
     float const *clearColor)
 {
-    if (mBackbufferAvailable == nullptr)
-        mBackbufferAvailable = std::make_unique<GPUSynchronizationObject>();
+    if (mBackbufferAvailableSyncIndex == -1)
+        mBackbufferAvailableSyncIndex = GetNewSyncObjectIndex();
 
     auto renderer = Renderer::Get();
-    mImageIndex = renderer->AcquireNextImage(mBackbufferAvailable.get());
+    mImageIndex = renderer->AcquireNextImage(
+        mGPUSynchronizationObjects[mBackbufferAvailableSyncIndex]);
 
     VkClearValue clearValue = {};
     memcpy(clearValue.color.float32, clearColor, sizeof(float) * 4);
 
-    auto pClearValue = (VkClearValue *)CopyToTemporaryStorage(
-        (u8 *)&clearValue, sizeof(clearValue));
-    ThrowIfFailed(pClearValue != nullptr,
-                  "Unable to copy clear color value to temporary storage");
+    auto pClearValue = &clearValue;
     VkRenderPassBeginInfo rpInfo = {};
     {
         rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -365,14 +367,17 @@ void CommandList::EndRenderPass()
     jnrCmdEndRenderPass(mCommandBuffers[mActiveCommandIndex]);
 }
 
+#endif /* USE_RENDERPASS */
+
 void CommandList::BeginRenderingOnBackbuffer(float const backgroundColor[4],
                                              Image *depth, bool useStencil)
 {
-    if (mBackbufferAvailable == nullptr)
-        mBackbufferAvailable = std::make_unique<GPUSynchronizationObject>();
+    if (mBackbufferAvailableSyncIndex == -1)
+        mBackbufferAvailableSyncIndex = GetNewSyncObjectIndex();
 
     auto renderer = Renderer::Get();
-    mImageIndex = renderer->AcquireNextImage(mBackbufferAvailable.get());
+    mImageIndex = renderer->AcquireNextImage(
+        mGPUSynchronizationObjects[mBackbufferAvailableSyncIndex]);
     {
         TransitionInfo ti{};
         {
@@ -530,17 +535,17 @@ void CommandList::EndRendering()
     jnrCmdEndRendering(mCommandBuffers[mActiveCommandIndex]);
 }
 
-void Vulkan::CommandList::AddLocalBuffer(std::unique_ptr<Buffer> &&buffer)
+void Vulkan::CommandList::AddLocalBuffer(Buffer &&buffer)
 {
     mMemoryTracker.AddBuffer(std::move(buffer));
 }
 
-void Vulkan::CommandList::AddLocalImage(std::unique_ptr<Image> &&image)
+void Vulkan::CommandList::AddLocalImage(Image &&image)
 {
     mMemoryTracker.AddImage(std::move(image));
 }
 
-void CommandList::Submit(CPUSynchronizationObject *signalWhenFinished)
+void CommandList::Submit(CPUSynchronizationObject const &signalWhenFinished)
 {
     auto renderer = Renderer::Get();
     VkSubmitInfo submitInfo{};
@@ -558,24 +563,25 @@ void CommandList::Submit(CPUSynchronizationObject *signalWhenFinished)
     if (mType == CommandListType::Graphics)
     {
         vkThrowIfFailed(jnrQueueSubmit(renderer->mGraphicsQueue, 1, &submitInfo,
-                                       signalWhenFinished == nullptr
-                                           ? VK_NULL_HANDLE
-                                           : signalWhenFinished->GetFence()));
+                                       signalWhenFinished));
     }
 }
 
-void CommandList::SubmitToScreen(CPUSynchronizationObject *signalWhenFinished)
+void CommandList::SubmitToScreen(
+    CPUSynchronizationObject const &signalWhenFinished)
 {
     /*DSHOWINFO("Submitting command buffer ", (void
      * *)mCommandBuffers[mActiveCommandIndex], " to the screen");*/
-    if (mRenderingFinished == nullptr)
-        mRenderingFinished = std::make_unique<GPUSynchronizationObject>();
+    if (mRenderingFinishedSyncIndex == -1)
+        mRenderingFinishedSyncIndex = GetNewSyncObjectIndex();
 
     auto renderer = Renderer::Get();
     {
         /* Submit the command buffers */
-        VkSemaphore waitSemaphores[] = {mBackbufferAvailable->GetSemaphore()};
-        VkSemaphore signalSemaphores[] = {mRenderingFinished->GetSemaphore()};
+        VkSemaphore waitSemaphores[] = {
+            mGPUSynchronizationObjects[mBackbufferAvailableSyncIndex]};
+        VkSemaphore signalSemaphores[] = {
+            mGPUSynchronizationObjects[mRenderingFinishedSyncIndex]};
 
         VkPipelineStageFlags waitStages[] = {
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -594,16 +600,14 @@ void CommandList::SubmitToScreen(CPUSynchronizationObject *signalWhenFinished)
 
         if (mType == CommandListType::Graphics)
         {
-            vkThrowIfFailed(
-                jnrQueueSubmit(renderer->mGraphicsQueue, 1, &submitInfo,
-                               signalWhenFinished == nullptr
-                                   ? VK_NULL_HANDLE
-                                   : signalWhenFinished->GetFence()));
+            vkThrowIfFailed(jnrQueueSubmit(renderer->mGraphicsQueue, 1,
+                                           &submitInfo, signalWhenFinished));
         }
     }
 
     {
-        VkSemaphore waitSemaphores[] = {mRenderingFinished->GetSemaphore()};
+        VkSemaphore waitSemaphores[] = {
+            mGPUSynchronizationObjects[mRenderingFinishedSyncIndex]};
         VkSwapchainKHR swapchains[] = {renderer->mSwapchain};
         u32 imageIndices[] = {(u32)mImageIndex};
 
@@ -625,19 +629,6 @@ void CommandList::SubmitToScreen(CPUSynchronizationObject *signalWhenFinished)
 void CommandList::SubmitAndWait()
 {
     CPUSynchronizationObject cpuWait;
-    Submit(&cpuWait);
+    Submit(cpuWait);
     cpuWait.Wait();
-}
-
-void *CommandList::CopyToTemporaryStorage(u8 *data, u8 dataSize)
-{
-    if (mTemporaryStorageOffset + dataSize < TEMPORARY_STORAGE_SIZE)
-    {
-        memcpy(mTemporaryStorage + mTemporaryStorageOffset, data, dataSize);
-        void *returnData = mTemporaryStorage + mTemporaryStorageOffset;
-        mTemporaryStorageOffset += dataSize;
-
-        return returnData;
-    }
-    return nullptr;
 }

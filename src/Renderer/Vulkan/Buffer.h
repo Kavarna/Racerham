@@ -2,6 +2,7 @@
 
 #include "Renderer.h"
 #include "VulkanLoader.h"
+#include "vulkan/vulkan_core.h"
 
 #include <cstring>
 
@@ -13,6 +14,30 @@ class Buffer
     friend class DescriptorSet;
 
 public:
+    Buffer() = default;
+
+    Buffer(const Buffer &) = delete;
+    Buffer &operator=(const Buffer &) = delete;
+
+    Buffer(Buffer &&rhs)
+    {
+        *this = std::move(rhs);
+    }
+
+    Buffer &operator=(Buffer &&rhs)
+    {
+        if (this != &rhs)
+        {
+            std::swap(mBuffer, rhs.mBuffer);
+            std::swap(mAllocation, rhs.mAllocation);
+            std::swap(mAllocationInfo, rhs.mAllocationInfo);
+            std::swap(mElementSize, rhs.mElementSize);
+            std::swap(mCount, rhs.mCount);
+            std::swap(mData, rhs.mData);
+        }
+        return *this;
+    }
+
     Buffer(u64 elementSize, u64 count, VkBufferUsageFlags usage,
            VmaAllocationCreateFlags allocationFlags = 0)
         : mElementSize(elementSize), mCount(count)
@@ -109,16 +134,19 @@ public:
             vmaUnmapMemory(allocator, mAllocation);
         }
 
-        vmaDestroyBuffer(allocator, mBuffer, mAllocation);
+        if (mBuffer != VK_NULL_HANDLE)
+        {
+            vmaDestroyBuffer(allocator, mBuffer, mAllocation);
+        }
     }
 
 private:
-    VkBuffer mBuffer;
-    VmaAllocation mAllocation;
-    VmaAllocationInfo mAllocationInfo;
+    VkBuffer mBuffer = VK_NULL_HANDLE;
+    VmaAllocation mAllocation = VK_NULL_HANDLE;
+    VmaAllocationInfo mAllocationInfo = {};
 
-    u64 mElementSize;
-    u64 mCount;
+    u64 mElementSize = 0;
+    u64 mCount = 0;
     void *mData = nullptr;
 };
 

@@ -12,7 +12,7 @@
 class BatchRenderer
 {
 public:
-    BatchRenderer()
+    BatchRenderer() : mPipeline("BatchRendererPipeline")
     {
         InitVulkanState();
         Resize(1024);
@@ -25,7 +25,7 @@ public:
     {
         mVertexCount = 0;
     }
-    void Render(Vulkan::CommandList *cmdList, Camera const &camera);
+    void Render(Vulkan::CommandList &cmdList, Camera const &camera);
     void AddVertex(VertexPositionColor const &vertex);
 
     void OnResize();
@@ -36,7 +36,7 @@ private:
 
 private:
     u32 mVertexCount = 0;
-    std::unique_ptr<Vulkan::Buffer> mBuffer;
-    std::unique_ptr<Vulkan::Pipeline> mPipeline;
-    std::unique_ptr<Vulkan::RootSignature> mRootSignature;
+    Vulkan::Buffer mVertexBuffer;
+    Vulkan::Pipeline mPipeline;
+    Vulkan::RootSignature mRootSignature;
 };

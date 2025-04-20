@@ -12,12 +12,29 @@ public:
     LayoutTracker();
     ~LayoutTracker();
 
+    LayoutTracker(LayoutTracker const &) = delete;
+    LayoutTracker &operator=(LayoutTracker const &) = delete;
+
+    LayoutTracker(LayoutTracker &&rhs)
+    {
+        *this = std::move(rhs);
+    }
+    LayoutTracker &operator=(LayoutTracker &&rhs)
+    {
+        if (this != &rhs)
+        {
+            std::swap(mImageLayouts, rhs.mImageLayouts);
+            std::swap(mBackbufferLayouts, rhs.mBackbufferLayouts);
+        }
+        return *this;
+    };
+
 public:
     void TransitionBackBufferImage(u32 index, VkImageLayout newLayout);
-    void TransitionImage(Image *img, VkImageLayout newLayout);
+    void TransitionImage(Image &img, VkImageLayout newLayout);
 
     VkImageLayout GetBackbufferImageLayout(u32 index);
-    VkImageLayout GetImageLayout(Image *img);
+    VkImageLayout GetImageLayout(Image &img);
 
     void Flush();
 

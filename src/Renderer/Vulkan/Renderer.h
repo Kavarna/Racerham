@@ -56,7 +56,7 @@ public:
     VkFormat GetDefaultDepthFormat();
     VkExtent2D GetBackbufferExtent();
 
-    u32 AcquireNextImage(GPUSynchronizationObject *);
+    u32 AcquireNextImage(GPUSynchronizationObject const &);
     VkImageView GetSwapchainImageView(u32 index);
     u32 GetSwapchainImageCount();
 

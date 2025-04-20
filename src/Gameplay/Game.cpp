@@ -27,11 +27,11 @@
 #include "vulkan/vulkan_core.h"
 #include <string_view>
 
-Game::Game(Vulkan::CommandList *initCommandList)
+Game::Game(Vulkan::CommandList &initCommandList)
 {
-    InitPerFrameResources();
     InitScene(initCommandList);
-    InitResources();
+
+    OnResize();
 
     if (mState.isDeveloper)
     {
@@ -42,74 +42,53 @@ Game::Game(Vulkan::CommandList *initCommandList)
 
 Game::~Game()
 {
-    DestroyFrameResources();
-
     mEntities.clear();
-    mGlobalVertexBuffer.reset();
 }
 
-void Game::InitPerFrameResources()
-{
-    for (u32 i = 0; i < Constants::MAX_IN_FLIGHT_FRAMES; ++i)
-    {
-        mPerFrameResources[i].commandList =
-            std::make_unique<Vulkan::CommandList>(
-                Vulkan::CommandListType::Graphics);
-        mPerFrameResources[i].commandList->Init();
-        mPerFrameResources[i].isCommandListDone =
-            std::make_unique<Vulkan::CPUSynchronizationObject>(true);
-    }
-}
-
-void Game::InitScene(Vulkan::CommandList *initCommandList)
+void Game::InitScene(Vulkan::CommandList &initCommandList)
 {
     AddTestEntity("TestEntity1");
     AddGround();
     BakeRenderingBuffers(initCommandList);
 }
 
-void Game::BakeRenderingBuffers(Vulkan::CommandList *initCommandList)
+void Game::BakeRenderingBuffers(Vulkan::CommandList &initCommandList)
 {
     /* Create staged buffers and copy data into them */
-    std::unique_ptr<Vulkan::Buffer> stagingVertexBuffer =
-        std::make_unique<Vulkan::Buffer>(
-            sizeof(VertexPositionNormal), mStagedVertexBuffer.size(),
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-    stagingVertexBuffer->Copy(mStagedVertexBuffer.data());
+    Vulkan::Buffer stagingVertexBuffer = Vulkan::Buffer(
+        sizeof(VertexPositionNormal), mStagedVertexBuffer.size(),
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+    stagingVertexBuffer.Copy(mStagedVertexBuffer.data());
 
-    std::unique_ptr<Vulkan::Buffer> stagingIndexBuffer =
-        std::make_unique<Vulkan::Buffer>(
-            sizeof(u32), mStagedIndexBuffer.size(),
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-    stagingIndexBuffer->Copy(mStagedIndexBuffer.data());
+    Vulkan::Buffer stagingIndexBuffer = Vulkan::Buffer(
+        sizeof(u32), mStagedIndexBuffer.size(),
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+    stagingIndexBuffer.Copy(mStagedIndexBuffer.data());
 
     /* Create vertex & index buffer */
-    mGlobalVertexBuffer = std::make_unique<Vulkan::Buffer>(
+    mGlobalVertexBuffer = Vulkan::Buffer(
         sizeof(VertexPositionNormal), mStagedVertexBuffer.size(),
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-    mGlobalIndexBuffer = std::make_unique<Vulkan::Buffer>(
-        sizeof(u32), mStagedIndexBuffer.size(),
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    mGlobalIndexBuffer = Vulkan::Buffer(sizeof(u32), mStagedIndexBuffer.size(),
+                                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                                            VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
     /* Perfom copy from staged buffer to actual buffers */
-    initCommandList->CopyBuffer(mGlobalVertexBuffer.get(),
-                                stagingVertexBuffer.get());
-    initCommandList->CopyBuffer(mGlobalIndexBuffer.get(),
-                                stagingIndexBuffer.get());
+    initCommandList.CopyBuffer(mGlobalVertexBuffer, stagingVertexBuffer);
+    initCommandList.CopyBuffer(mGlobalIndexBuffer, stagingIndexBuffer);
 
     /* Save temporary buffers in order to safely delete them later */
-    initCommandList->AddLocalBuffer(std::move(stagingVertexBuffer));
-    initCommandList->AddLocalBuffer(std::move(stagingIndexBuffer));
+    initCommandList.AddLocalBuffer(std::move(stagingVertexBuffer));
+    initCommandList.AddLocalBuffer(std::move(stagingIndexBuffer));
 
-    mBasicRenderSystem.SetRenderingBuffers(mGlobalVertexBuffer.get(),
-                                           mGlobalIndexBuffer.get());
+    mBasicRenderSystem.SetRenderingBuffers(&mGlobalVertexBuffer,
+                                           &mGlobalIndexBuffer);
 }
 
-void Game::InitResources()
+void Game::InitSizeDependentResources()
 {
     glm::vec2 windowDimensions = Application::Get()->GetWindowDimensions();
     /* Create simple camera */
@@ -124,13 +103,15 @@ void Game::InitResources()
         depthInfo.format = Vulkan::Renderer::Get()->GetDefaultDepthFormat();
         depthInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     }
-    mDepthImage = std::make_unique<Vulkan::Image>(depthInfo);
+    mDepthImage = Vulkan::Image(depthInfo);
 }
 
 void Game::OnResize()
 {
     mBasicRenderSystem.OnResize();
     mBatchRenderer.OnResize();
+
+    InitSizeDependentResources();
 }
 
 Components::Mesh Game::InitGeometry(std::string_view path)
@@ -226,20 +207,19 @@ Components::Mesh Game::InitGeometry(std::string_view path)
 
 Entity *Game::AddTestEntity(std::string_view name)
 {
-    std::unique_ptr<Entity> entity =
-        std::make_unique<Entity>(mRegistry.create(), mRegistry);
+    Entity *entity = mEntityArena.Allocate(1, mRegistry.create(), mRegistry);
 
     glm::mat4x4 world = glm::identity<glm::mat4x4>();
     world = glm::translate(world, glm::vec3(0.0f, 5.0f, 0.0f));
     entity->AddComponent(Components::Base{.world = world,
                                           .name = std::string(name),
                                           .inverseWorld = glm::inverse(world),
-                                          .entityPtr = entity.get()});
+                                          .entityPtr = entity});
     entity->AddComponent(
         Components::Update{.dirtyFrames = Constants::MAX_IN_FLIGHT_FRAMES,
                            .bufferIndex = (u32)mEntities.size()});
     mRegistry.on_update<Components::Base>().connect<&Entity::UpdateBase>(
-        entity.get());
+        entity);
     entity->UpdateBase();
 
     entity->AddComponent(InitGeometry("cube"));
@@ -247,15 +227,14 @@ Entity *Game::AddTestEntity(std::string_view name)
         entity->GetComponent<Components::Base>(),
         entity->GetComponent<Components::Mesh>(), 1.0f));
 
-    mEntities.push_back(std::move(entity));
+    mEntities.push_back(entity);
 
-    return mEntities.back().get();
+    return mEntities.back();
 }
 
 Entity *Game::AddGround()
 {
-    std::unique_ptr<Entity> entity =
-        std::make_unique<Entity>(mRegistry.create(), mRegistry);
+    Entity *entity = mEntityArena.Allocate(1, mRegistry.create(), mRegistry);
 
     glm::mat4x4 world = glm::identity<glm::mat4x4>();
     world = glm::translate(world, glm::vec3(0.0f, -50.0f, 0.0f));
@@ -263,12 +242,12 @@ Entity *Game::AddGround()
     entity->AddComponent(Components::Base{.world = world,
                                           .name = std::string("Ground"),
                                           .inverseWorld = glm::inverse(world),
-                                          .entityPtr = entity.get()});
+                                          .entityPtr = entity});
     entity->AddComponent(
         Components::Update{.dirtyFrames = Constants::MAX_IN_FLIGHT_FRAMES,
                            .bufferIndex = (u32)mEntities.size()});
     mRegistry.on_update<Components::Base>().connect<&Entity::UpdateBase>(
-        entity.get());
+        entity);
     entity->UpdateBase();
 
     entity->AddComponent(InitGeometry("cube"));
@@ -276,9 +255,9 @@ Entity *Game::AddGround()
         entity->GetComponent<Components::Base>(),
         entity->GetComponent<Components::Mesh>(), 0.0f));
 
-    mEntities.push_back(std::move(entity));
+    mEntities.push_back(entity);
 
-    return mEntities.back().get();
+    return mEntities.back();
 }
 
 void Game::Update(float dt)
@@ -342,33 +321,24 @@ void Game::Render()
     auto &cmdList = mPerFrameResources[mCurrentFrame].commandList;
     auto &isCmdListDone = mPerFrameResources[mCurrentFrame].isCommandListDone;
 
-    isCmdListDone->Wait();
-    isCmdListDone->Reset();
+    isCmdListDone.Wait();
+    isCmdListDone.Reset();
 
-    cmdList->Begin();
+    cmdList.Begin();
     {
         f32 backgroundColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-        cmdList->BeginRenderingOnBackbuffer(backgroundColor, mDepthImage.get(),
-                                            false);
-        mBasicRenderSystem.Render(cmdList.get(), mCurrentFrame, mRegistry,
+        cmdList.BeginRenderingOnBackbuffer(backgroundColor, &mDepthImage,
+                                           false);
+        mBasicRenderSystem.Render(cmdList, mCurrentFrame, mRegistry,
                                   mEntities.size());
-        mBatchRenderer.Render(cmdList.get(), mCamera);
-        cmdList->EndRendering();
+        mBatchRenderer.Render(cmdList, mCamera);
+        cmdList.EndRendering();
     }
-    cmdList->End();
+    cmdList.End();
 
-    cmdList->SubmitToScreen(isCmdListDone.get());
+    cmdList.SubmitToScreen(isCmdListDone);
 
     /* Finish the frame and update the dirty flag */
     mCurrentFrame = (mCurrentFrame + 1) % Constants::MAX_IN_FLIGHT_FRAMES;
     mUpdateFrameSystem.Update(mRegistry);
-}
-
-void Game::DestroyFrameResources()
-{
-    for (u32 i = 0; i < Constants::MAX_IN_FLIGHT_FRAMES; ++i)
-    {
-        mPerFrameResources[i].commandList.reset();
-        mPerFrameResources[i].isCommandListDone.reset();
-    }
 }

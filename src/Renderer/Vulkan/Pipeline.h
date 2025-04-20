@@ -14,16 +14,54 @@ class Pipeline
     friend class CommandList;
 
 public:
-    Pipeline(std::string const &name);
-    ~Pipeline();
+    Pipeline(std::string const &name) : mName(name)
+    {
+        InitDefaultPipelineState();
+    }
+    ~Pipeline()
+    {
+        Clear();
+    }
 
     Pipeline(Pipeline const &) = delete;
     Pipeline &operator=(Pipeline const &) = delete;
 
+    Pipeline(Pipeline &&rhs)
+    {
+        *this = std::move(rhs);
+    }
+    Pipeline &operator=(Pipeline &&rhs)
+    {
+        if (this != &rhs)
+        {
+            std::swap(mName, rhs.mName);
+            std::swap(mRootSignature, rhs.mRootSignature);
+            std::swap(mColorOutputs, rhs.mColorOutputs);
+            std::swap(mDepthFormat, rhs.mDepthFormat);
+            std::swap(mStencilFormat, rhs.mStencilFormat);
+            std::swap(mShaderModules, rhs.mShaderModules);
+            std::swap(mBlendState, rhs.mBlendState);
+            std::swap(mDepthStencilState, rhs.mDepthStencilState);
+            std::swap(mDynamicState, rhs.mDynamicState);
+            std::swap(mInputAssemblyState, rhs.mInputAssemblyState);
+            std::swap(mMultisampleState, rhs.mMultisampleState);
+            std::swap(mRasterizationState, rhs.mRasterizationState);
+            std::swap(mTesselationState, rhs.mTesselationState);
+            std::swap(mVertexInputState, rhs.mVertexInputState);
+            std::swap(mViewportState, rhs.mViewportState);
+            std::swap(mRenderingInfo, rhs.mRenderingInfo);
+            std::swap(mPipelineInfo, rhs.mPipelineInfo);
+            std::swap(mPipeline, rhs.mPipeline);
+        }
+
+        return *this;
+    }
+
 public:
-    void ClearShaders();
+    void Clear(bool reinit = false);
     void AddShader(std::string const &path);
-    void AddShader(std::vector<char> const &shaderContent, VkShaderStageFlags shaderStage);
+    void AddShader(std::vector<char> const &shaderContent,
+                   VkShaderStageFlags shaderStage);
 
     void SetRootSignature(RootSignature const *rootSignature);
 
@@ -34,9 +72,13 @@ public:
     void SetDepthImage(class Image const *img);
     void SetDepthStencilImage(class Image const *img);
 
-    void InitFrom(Pipeline &p);
+    void InitFrom(Pipeline const &p);
 
-    void Bake(RenderPass * = nullptr);
+    void Bake(
+#if USE_RENDERPASS
+        RenderPass * = nullptr
+#endif /* USE_RENDERPASS */
+    );
 
 public:
     VkPipelineColorBlendStateCreateInfo &GetColorBlendStateCreateInfo()
@@ -80,7 +122,7 @@ private:
     void InitDefaultPipelineState();
 
 private:
-    std::string mName;
+    std::string mName = "";
 
     RootSignature const *mRootSignature = nullptr;
 

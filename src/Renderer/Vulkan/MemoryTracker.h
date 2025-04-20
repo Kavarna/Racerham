@@ -1,11 +1,13 @@
 #pragma once
 
 #include "VulkanLoader.h"
+#include <exception>
+
+#include "Buffer.h"
+#include "Image.h"
 
 namespace Vulkan
 {
-class Buffer;
-class Image;
 
 class MemoryTracker
 {
@@ -13,14 +15,32 @@ public:
     MemoryTracker();
     ~MemoryTracker();
 
+    MemoryTracker(MemoryTracker const &) = delete;
+    MemoryTracker &operator=(MemoryTracker const &) = delete;
+
+    MemoryTracker(MemoryTracker &&rhs)
+    {
+        *this = std::move(rhs);
+    }
+    MemoryTracker &operator=(MemoryTracker &&rhs)
+    {
+        if (this != &rhs)
+        {
+            std::swap(mBuffers, rhs.mBuffers);
+            std::swap(mImages, rhs.mImages);
+        }
+
+        return *this;
+    }
+
 public:
-    void AddBuffer(std::unique_ptr<Buffer> &&buffer);
-    void AddImage(std::unique_ptr<Image> &&image);
+    void AddBuffer(Buffer &&buffer);
+    void AddImage(Image &&image);
 
     void Flush();
 
 private:
-    std::vector<std::unique_ptr<Buffer>> mBuffers;
-    std::vector<std::unique_ptr<Image>> mImages;
+    std::vector<Buffer> mBuffers;
+    std::vector<Image> mImages;
 };
 } // namespace Vulkan

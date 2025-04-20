@@ -914,12 +914,12 @@ VkExtent2D Renderer::GetBackbufferExtent()
     return mSwapchainExtent;
 }
 
-u32 Renderer::AcquireNextImage(GPUSynchronizationObject *syncObject)
+u32 Renderer::AcquireNextImage(GPUSynchronizationObject const &syncObject)
 {
     u32 imageIndex = 0;
     vkThrowIfFailed(jnrAcquireNextImageKHR(mDevice, mSwapchain, UINT64_MAX,
-                                           syncObject->GetSemaphore(),
-                                           VK_NULL_HANDLE, &imageIndex));
+                                           syncObject, VK_NULL_HANDLE,
+                                           &imageIndex));
     return imageIndex;
 }
 

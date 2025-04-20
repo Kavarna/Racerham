@@ -16,29 +16,18 @@ MemoryTracker::~MemoryTracker()
 {
 }
 
-void MemoryTracker::AddBuffer(std::unique_ptr<Buffer> &&buffer)
+void MemoryTracker::AddBuffer(Buffer &&buffer)
 {
-    ThrowIfFailed(buffer != nullptr, "Can not register an null-buffer in the memory tracker");
     mBuffers.emplace_back(std::move(buffer));
 }
 
-void Vulkan::MemoryTracker::AddImage(std::unique_ptr<Image> &&image)
+void Vulkan::MemoryTracker::AddImage(Image &&image)
 {
-    ThrowIfFailed(image != nullptr, "Can not register an null-buffer in the memory tracker");
     mImages.emplace_back(std::move(image));
 }
 
 void Vulkan::MemoryTracker::Flush()
 {
-    for (auto &buffer : mBuffers)
-    {
-        buffer.reset();
-    }
     mBuffers.clear();
-
-    for (auto &image : mImages)
-    {
-        image.reset();
-    }
     mImages.clear();
 }

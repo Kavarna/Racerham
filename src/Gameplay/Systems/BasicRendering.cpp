@@ -16,10 +16,9 @@ namespace Systems
 namespace BasicRendering
 {
 
-RenderSystem::RenderSystem()
+RenderSystem::RenderSystem() : mPipeline("SimplePipeline")
 {
-
-    mPerFrameBuffer = std::make_unique<Vulkan::Buffer>(
+    mPerFrameBuffer = Vulkan::Buffer(
         sizeof(glm::mat4x4), 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
     StateInit();
@@ -28,18 +27,16 @@ RenderSystem::RenderSystem()
 void RenderSystem::StateInit()
 {
     /* Create a simple root signature*/
-    mDescriptorSet = std::make_unique<Vulkan::DescriptorSet>();
     {
-        mDescriptorSet->AddStorageBuffer(0, 1);
-        mDescriptorSet->AddInputBuffer(1, 1);
-        mDescriptorSet->Bake(Constants::MAX_IN_FLIGHT_FRAMES);
+        mDescriptorSet.AddStorageBuffer(0, 1);
+        mDescriptorSet.AddInputBuffer(1, 1);
+        mDescriptorSet.Bake(Constants::MAX_IN_FLIGHT_FRAMES);
     }
-    mRootSignature = std::make_unique<Vulkan::RootSignature>();
     {
-        mRootSignature->AddPushRange<u32>(0, 1);
-        mRootSignature->AddDescriptorSet(mDescriptorSet.get());
+        mRootSignature.AddPushRange<u32>(0, 1);
+        mRootSignature.AddDescriptorSet(&mDescriptorSet);
     }
-    mRootSignature->Bake();
+    mRootSignature.Bake();
     OnResize();
 }
 
@@ -62,26 +59,26 @@ void RenderSystem::OnResize()
         scissor.extent = {(u32)windowDimensions.x, (u32)windowDimensions.y};
     }
 
-    mPipeline = std::make_unique<Vulkan::Pipeline>("SimplePipeline");
+    mPipeline.Clear();
     {
-        mPipeline->SetRootSignature(mRootSignature.get());
-        mPipeline->AddShader("Shaders/basic.vert.spv");
-        mPipeline->AddShader("Shaders/basic.frag.spv");
+        mPipeline.SetRootSignature(&mRootSignature);
+        mPipeline.AddShader("Shaders/basic.vert.spv");
+        mPipeline.AddShader("Shaders/basic.frag.spv");
     }
     {
-        auto &viewportState = mPipeline->GetViewportStateCreateInfo();
+        auto &viewportState = mPipeline.GetViewportStateCreateInfo();
         viewportState.viewportCount = 1;
         viewportState.pViewports = &viewport;
         viewportState.scissorCount = 1;
         viewportState.pScissors = &scissor;
     }
     {
-        auto &rasterizationState = mPipeline->GetRasterizationStateCreateInfo();
+        auto &rasterizationState = mPipeline.GetRasterizationStateCreateInfo();
         rasterizationState.cullMode = VkCullModeFlagBits::VK_CULL_MODE_NONE;
     }
     VkPipelineColorBlendAttachmentState attachmentInfo{};
     {
-        auto &blendState = mPipeline->GetColorBlendStateCreateInfo();
+        auto &blendState = mPipeline.GetColorBlendStateCreateInfo();
         attachmentInfo.blendEnable = VK_FALSE;
         attachmentInfo.colorWriteMask =
             VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
@@ -95,7 +92,7 @@ void RenderSystem::OnResize()
     auto vertexPositionBindingDescription =
         VertexPositionNormal::GetInputBindingDescription();
     {
-        auto &vertexInput = mPipeline->GetVertexInputStateCreateInfo();
+        auto &vertexInput = mPipeline.GetVertexInputStateCreateInfo();
         vertexInput.vertexAttributeDescriptionCount =
             (u32)vertexPositionAttributeDescription.size();
         vertexInput.pVertexAttributeDescriptions =
@@ -106,7 +103,7 @@ void RenderSystem::OnResize()
             vertexPositionBindingDescription.data();
     }
     {
-        auto &depthState = mPipeline->GetDepthStencilStateCreateInfo();
+        auto &depthState = mPipeline.GetDepthStencilStateCreateInfo();
         depthState.depthTestEnable = VK_TRUE;
         depthState.depthWriteEnable = VK_TRUE;
         depthState.depthBoundsTestEnable = VK_TRUE;
@@ -117,23 +114,22 @@ void RenderSystem::OnResize()
     }
     /* Render directly to the backbuffer and depth stencil but they must have
      * been bound before actully rendering */
-    mPipeline->AddBackbufferColorOutput();
-    mPipeline->SetBackbufferDepthStencilOutput();
-    mPipeline->Bake();
+    mPipeline.AddBackbufferColorOutput();
+    mPipeline.SetBackbufferDepthStencilOutput();
+    mPipeline.Bake();
 }
 
 void RenderSystem::UpdateCamera(Camera const &camera)
 {
     auto viewProjectionMatrix = camera.GetProjection() * camera.GetView();
-    mPerFrameBuffer->Copy(&viewProjectionMatrix);
+    mPerFrameBuffer.Copy(&viewProjectionMatrix);
     mIsDirty = true;
 }
 void RenderSystem::ResizeWorldBufferIfNeeded(u32 objectCount)
 {
-    if (mWorldBuffer == nullptr || objectCount > mWorldBuffer->GetCount())
-        [[unlikely]]
+    if (objectCount > mWorldBuffer.GetCount()) [[unlikely]]
     {
-        mWorldBuffer = std::make_unique<Vulkan::Buffer>(
+        mWorldBuffer = Vulkan::Buffer(
             sizeof(BasicPerObjectInfo), objectCount,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
@@ -141,7 +137,7 @@ void RenderSystem::ResizeWorldBufferIfNeeded(u32 objectCount)
     }
 }
 
-void RenderSystem::Render(Vulkan::CommandList *cmdList, u32 currentFrameIndex,
+void RenderSystem::Render(Vulkan::CommandList &cmdList, u32 currentFrameIndex,
                           entt::registry const &registry, u32 objectCount)
 {
     ResizeWorldBufferIfNeeded(objectCount);
@@ -152,43 +148,41 @@ void RenderSystem::Render(Vulkan::CommandList *cmdList, u32 currentFrameIndex,
     {
         if (update.dirtyFrames)
         {
-            auto *info = (BasicPerObjectInfo *)mWorldBuffer->GetElement(
+            auto *info = (BasicPerObjectInfo *)mWorldBuffer.GetElement(
                 update.bufferIndex);
             info->world = base.world;
             mIsDirty = true;
-            SHOWINFO("Update world for object ", update.bufferIndex,
-                     " because dirty frames is ", update.dirtyFrames);
         }
     }
 
     CHECK_FATAL(mVertexBuffer, "A vertex buffer was not specified");
     CHECK_FATAL(mIndexBuffer, "A index buffer was not specified");
 
-    if (mIsDirty)
+    if (mIsDirty) [[unlikely]]
     {
         /* TODO: To research if recording everything in a secondary command
          * buffer and just executing that instead of re-recording makes sense */
 
-        mDescriptorSet->SetActiveInstance(currentFrameIndex);
-        mDescriptorSet->BindStorageBuffer(mWorldBuffer.get(), 0);
-        mDescriptorSet->BindInputBuffer(mPerFrameBuffer.get(), 1);
+        mDescriptorSet.SetActiveInstance(currentFrameIndex);
+        mDescriptorSet.BindStorageBuffer(mWorldBuffer, 0);
+        mDescriptorSet.BindInputBuffer(mPerFrameBuffer, 1);
     }
 
-    cmdList->BindVertexBuffer(mVertexBuffer, 0);
-    cmdList->BindIndexBuffer(mIndexBuffer);
-    cmdList->BindPipeline(mPipeline.get());
-    cmdList->BindDescriptorSet(mDescriptorSet.get(), currentFrameIndex,
-                               mRootSignature.get());
+    cmdList.BindVertexBuffer(*mVertexBuffer, 0);
+    cmdList.BindIndexBuffer(*mIndexBuffer);
+    cmdList.BindPipeline(mPipeline);
+    cmdList.BindDescriptorSet(mDescriptorSet, currentFrameIndex,
+                              mRootSignature);
 
     auto meshes =
         registry.view<const Components::Update, const Components::Mesh>();
     for (auto const &[entity, update, mesh] : meshes.each())
     {
         u32 index = update.bufferIndex;
-        cmdList->BindPushRange<u32>(mRootSignature.get(), 0, 1, &index);
-        cmdList->DrawIndexedInstanced(mesh.indices.indexCount,
-                                      mesh.indices.firstIndex,
-                                      mesh.indices.firstVertex);
+        cmdList.BindPushRange<u32>(mRootSignature, 0, 1, &index);
+        cmdList.DrawIndexedInstanced(mesh.indices.indexCount,
+                                     mesh.indices.firstIndex,
+                                     mesh.indices.firstVertex);
     }
 }
 

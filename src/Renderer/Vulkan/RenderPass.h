@@ -6,6 +6,7 @@
 
 namespace Vulkan
 {
+#ifdef USE_RENDERPASS
 using Attachment = u32;
 class RenderPass
 {
@@ -22,14 +23,20 @@ public:
 public:
     void Bake();
 
-    Attachment AddAttachment(Image *image, VkImageLayout initialLayout, VkImageLayout finalLayout,
-                             VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp);
-    Attachment AddBackbufferAttachment(VkImageLayout initialLayout, VkImageLayout finalLayout,
-                                       VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp);
-
-    Attachment AddAttachment(Image *image, VkImageLayout finalLayout, VkAttachmentLoadOp loadOp,
+    Attachment AddAttachment(Image *image, VkImageLayout initialLayout,
+                             VkImageLayout finalLayout,
+                             VkAttachmentLoadOp loadOp,
                              VkAttachmentStoreOp storeOp);
-    Attachment AddBackbufferAttachment(VkImageLayout finalLayout, VkAttachmentLoadOp loadOp,
+    Attachment AddBackbufferAttachment(VkImageLayout initialLayout,
+                                       VkImageLayout finalLayout,
+                                       VkAttachmentLoadOp loadOp,
+                                       VkAttachmentStoreOp storeOp);
+
+    Attachment AddAttachment(Image *image, VkImageLayout finalLayout,
+                             VkAttachmentLoadOp loadOp,
+                             VkAttachmentStoreOp storeOp);
+    Attachment AddBackbufferAttachment(VkImageLayout finalLayout,
+                                       VkAttachmentLoadOp loadOp,
                                        VkAttachmentStoreOp storeOp);
 
     void AddColorAttachment(Attachment attachment, VkImageLayout layout);
@@ -47,7 +54,8 @@ private:
 
     std::vector<std::vector<VkAttachmentReference>> mColorAttachmentReferences;
     std::vector<std::vector<VkAttachmentReference>> mInputAttachmentReferences;
-    std::vector<std::vector<VkAttachmentReference>> mPreserveAttachmentReferences;
+    std::vector<std::vector<VkAttachmentReference>>
+        mPreserveAttachmentReferences;
 
     u32 mCurrentSubpass = 0;
     u32 mSubpassCount = 0;
@@ -76,5 +84,7 @@ private:
     u32 mHeight;
     VkFramebuffer mFramebuffer;
 };
+
+#endif /* USE_RENDERPASS */
 
 } // namespace Vulkan

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Buffer.h"
+#include "Image.h"
+
 #include "Check.h"
 #include "vulkan/vulkan_core.h"
 #include <vector>
@@ -8,8 +10,6 @@
 
 namespace Vulkan
 {
-class Image;
-class ImageView;
 
 class DescriptorSet
 {
@@ -17,12 +17,36 @@ class DescriptorSet
     friend class CommandList;
 
 public:
-    DescriptorSet();
+    DescriptorSet() = default;
     ~DescriptorSet();
 
-    /* Make this non-copyable */
     DescriptorSet(const DescriptorSet &) = delete;
     DescriptorSet &operator=(const DescriptorSet &) = delete;
+
+    DescriptorSet(DescriptorSet &&rhs)
+    {
+        *this = std::move(rhs);
+    }
+    DescriptorSet &operator=(DescriptorSet &&rhs)
+    {
+        if (this != &rhs)
+        {
+            std::swap(mLayoutInfo, rhs.mLayoutInfo);
+            std::swap(mPoolInfo, rhs.mPoolInfo);
+            std::swap(mInputBufferCount, rhs.mInputBufferCount);
+            std::swap(mStorageBufferCount, rhs.mStorageBufferCount);
+            std::swap(mSamplerCount, rhs.mSamplerCount);
+            std::swap(mCombinedImageSamplerCount,
+                      rhs.mCombinedImageSamplerCount);
+            std::swap(mActiveInstance, rhs.mActiveInstance);
+            std::swap(mBindings, rhs.mBindings);
+            std::swap(mLayout, rhs.mLayout);
+            std::swap(mDescriptorPool, rhs.mDescriptorPool);
+            std::swap(mDescriptorSets, rhs.mDescriptorSets);
+        }
+
+        return *this;
+    }
 
     void AddSampler(u32 binding, std::vector<VkSampler> const &samplers,
                     VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
@@ -30,7 +54,7 @@ public:
     void AddCombinedImageSampler(
         u32 binding, VkSampler *sampler,
         VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
-    void BindCombinedImageSampler(u32 binding, Vulkan::Image *image,
+    void BindCombinedImageSampler(u32 binding, Vulkan::Image &image,
                                   VkImageAspectFlags aspectFlags,
                                   VkSampler sampler);
     void BindCombinedImageSampler(u32 binding, Vulkan::ImageView image,
@@ -39,12 +63,12 @@ public:
 
     void AddStorageBuffer(u32 binding, u32 descriptorCount,
                           VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
-    void BindStorageBuffer(Vulkan::Buffer *buffer, u32 binding,
+    void BindStorageBuffer(Vulkan::Buffer &buffer, u32 binding,
                            u32 elementIndex = 0);
 
     void AddInputBuffer(u32 binding, u32 descriptorCount,
                         VkShaderStageFlags stages = VK_SHADER_STAGE_ALL);
-    void BindInputBuffer(Vulkan::Buffer *buffer, u32 binding,
+    void BindInputBuffer(Vulkan::Buffer &buffer, u32 binding,
                          u32 elementIndex = 0);
 
     void BakeLayout();
@@ -86,6 +110,26 @@ class RootSignature
 public:
     RootSignature();
     ~RootSignature();
+
+    RootSignature(RootSignature const &) = delete;
+    RootSignature &operator=(RootSignature const &) = delete;
+
+    RootSignature(RootSignature &&rhs)
+    {
+        *this = std::move(rhs);
+    }
+
+    RootSignature &operator=(RootSignature &&rhs)
+    {
+        if (this != &rhs)
+        {
+            std::swap(mPushRanges, rhs.mPushRanges);
+            std::swap(mDescriptorSetLayouts, rhs.mDescriptorSetLayouts);
+            std::swap(mPipelineLayout, rhs.mPipelineLayout);
+        }
+
+        return *this;
+    }
 
     /* TODO: Should make this non-copyable */
 

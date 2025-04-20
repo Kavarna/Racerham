@@ -1,6 +1,7 @@
 #include "Application.h"
 #include "Check.h"
 #include "Exceptions.h"
+
 int main()
 {
     try

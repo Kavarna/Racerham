@@ -10,24 +10,6 @@
 
 using namespace Vulkan;
 
-Pipeline::Pipeline(std::string const &name) : mName(name)
-{
-    InitDefaultPipelineState();
-}
-
-Pipeline::~Pipeline()
-{
-    VkDevice device = Renderer::Get()->GetDevice();
-
-    for (auto const &shader : mShaderModules)
-    {
-        jnrDestroyShaderModule(device, shader.module, nullptr);
-    }
-
-    if (mPipeline != VK_NULL_HANDLE)
-        jnrDestroyPipeline(device, mPipeline, nullptr);
-}
-
 void Pipeline::AddBackbufferColorOutput()
 {
     VkFormat format = Renderer::Get()->GetBackbufferFormat();
@@ -61,7 +43,7 @@ void Vulkan::Pipeline::SetDepthStencilImage(Image const *img)
     mStencilFormat = img->GetFormat();
 }
 
-void Vulkan::Pipeline::InitFrom(Pipeline &p)
+void Vulkan::Pipeline::InitFrom(Pipeline const &p)
 {
     mRootSignature = p.mRootSignature;
     mColorOutputs = p.mColorOutputs;
@@ -83,41 +65,47 @@ void Pipeline::InitDefaultPipelineState()
 {
     {
         /* Blend State*/
-        mBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        mBlendState.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         mBlendState.logicOpEnable = VK_FALSE;
         mBlendState.attachmentCount = 1;
     }
 
     {
         /* Depth Stencil State */
-        mDepthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        mDepthStencilState.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         mDepthStencilState.stencilTestEnable = VK_FALSE;
         mDepthStencilState.depthTestEnable = VK_FALSE;
     }
 
     {
         /* Dynamic State */
-        mDynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        mDynamicState.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         mDynamicState.dynamicStateCount = 0;
     }
 
     {
         /* Input Assembly State */
-        mInputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        mInputAssemblyState.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         mInputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         mInputAssemblyState.primitiveRestartEnable = VK_FALSE;
     }
 
     {
         /* Multisample State */
-        mMultisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        mMultisampleState.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         mMultisampleState.alphaToOneEnable = VK_FALSE;
         mMultisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
     }
 
     {
         /* Rasterization State */
-        mRasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        mRasterizationState.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         mRasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
         mRasterizationState.depthClampEnable = VK_FALSE;
         mRasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
@@ -128,20 +116,23 @@ void Pipeline::InitDefaultPipelineState()
 
     {
         /* Tesselation State */
-        mTesselationState.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+        mTesselationState.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
         mTesselationState.patchControlPoints = 0;
     }
 
     {
         /* Vertex Input State */
-        mVertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        mVertexInputState.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         mVertexInputState.pVertexBindingDescriptions = 0;
         mVertexInputState.vertexAttributeDescriptionCount = 0;
     }
 
     {
         /* Viewport State */
-        mViewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        mViewportState.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         mViewportState.viewportCount = 0;
         mViewportState.scissorCount = 0;
     }
@@ -160,9 +151,27 @@ void Pipeline::InitDefaultPipelineState()
     mPipelineInfo.pViewportState = &mViewportState;
 }
 
-void Vulkan::Pipeline::ClearShaders()
+void Vulkan::Pipeline::Clear(bool reinit)
 {
+    VkDevice device = Renderer::Get()->GetDevice();
+
+    for (auto const &shader : mShaderModules)
+    {
+        jnrDestroyShaderModule(device, shader.module, nullptr);
+    }
     mShaderModules.clear();
+
+    mColorOutputs.clear();
+
+    if (mPipeline != VK_NULL_HANDLE)
+    {
+        jnrDestroyPipeline(device, mPipeline, nullptr);
+    }
+
+    if (reinit)
+    {
+        InitDefaultPipelineState();
+    }
 }
 
 void Pipeline::AddShader(std::string const &path)
@@ -175,16 +184,20 @@ void Pipeline::AddShader(std::string const &path)
 
     for (auto const &shader : mShaderModules)
     {
-        ThrowIfFailed(shader.stage != shaderStage, "A pipeline can have only a single shader of a certain type");
+        ThrowIfFailed(
+            shader.stage != shaderStage,
+            "A pipeline can have only a single shader of a certain type");
     }
 
-    ThrowIfFailed(shaderStage != 0, "\"", path, "\" doesn't contain the vertex type");
+    ThrowIfFailed(shaderStage != 0, "\"", path,
+                  "\" doesn't contain the vertex type");
     auto shaderContent = Jnrlib::ReadWholeFile(path);
 
     AddShader(shaderContent, shaderStage);
 }
 
-void Pipeline::AddShader(std::vector<char> const &shaderContent, VkShaderStageFlags shaderStage)
+void Pipeline::AddShader(std::vector<char> const &shaderContent,
+                         VkShaderStageFlags shaderStage)
 {
     VkDevice device = Renderer::Get()->GetDevice();
 
@@ -194,11 +207,13 @@ void Pipeline::AddShader(std::vector<char> const &shaderContent, VkShaderStageFl
     shaderInfo.codeSize = (u32)shaderContent.size();
 
     VkShaderModule shaderModule;
-    vkThrowIfFailed(jnrCreateShaderModule(device, &shaderInfo, nullptr, &shaderModule));
+    vkThrowIfFailed(
+        jnrCreateShaderModule(device, &shaderInfo, nullptr, &shaderModule));
 
     VkPipelineShaderStageCreateInfo pipelineStageInfo = {};
     {
-        pipelineStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        pipelineStageInfo.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         pipelineStageInfo.module = shaderModule;
         pipelineStageInfo.flags = 0;
         pipelineStageInfo.pName = "main";
@@ -213,7 +228,11 @@ void Pipeline::SetRootSignature(RootSignature const *rootSignature)
     mRootSignature = rootSignature;
 }
 
-void Pipeline::Bake(RenderPass *rp)
+void Pipeline::Bake(
+#if USE_RENDERPASS
+    RenderPass *rp
+#endif /* USE_RENDERPASS */
+)
 {
     VkPipelineLayout layout;
     if (mRootSignature)
@@ -236,14 +255,18 @@ void Pipeline::Bake(RenderPass *rp)
         mRenderingInfo.stencilAttachmentFormat = mStencilFormat;
     }
 
+#if USE_RENDERPASS
     if (rp == nullptr)
     {
+#endif /* USE_RENDERPASS */
         mPipelineInfo.pNext = &mRenderingInfo;
+#if USE_RENDERPASS
     }
     else
     {
         mPipelineInfo.renderPass = rp->mRenderpass;
     }
+#endif /* USE_RENDERPASS */
 
     mPipelineInfo.layout = layout;
     mPipelineInfo.pStages = mShaderModules.data();
@@ -251,7 +274,8 @@ void Pipeline::Bake(RenderPass *rp)
 
     auto cache = Renderer::Get()->GetPipelineCache();
 
-    vkThrowIfFailed(jnrCreateGraphicsPipelines(device, cache, 1, &mPipelineInfo, nullptr, &mPipeline););
+    vkThrowIfFailed(jnrCreateGraphicsPipelines(device, cache, 1, &mPipelineInfo,
+                                               nullptr, &mPipeline););
 
     DSHOWINFO("Successfully baked pipeline ", mName);
 }
