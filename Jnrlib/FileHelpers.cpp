@@ -1,15 +1,58 @@
 #include "FileHelpers.h"
 #include "Check.h"
+#include "Jnrlib/Exceptions.h"
+#include "Jnrlib/Singletone.h"
 
 #include <filesystem>
 #include <fstream>
 
+class KnownDirectoriesStorage
+    : public Jnrlib::ISingletone<KnownDirectoriesStorage>
+{
+    MAKE_SINGLETONE_CAPABLE(KnownDirectoriesStorage);
+
+private:
+    KnownDirectoriesStorage()
+    {
+        m_knownDirectories.push_back(".");
+    }
+
+public:
+    void RegisterDirectory(std::string_view dir)
+    {
+        m_knownDirectories.push_back(std::filesystem::absolute(dir));
+    }
+
+    std::filesystem::path ResolveFilePath(std::string const &givenPath)
+    {
+        using namespace std::filesystem;
+        for (const auto &dir : m_knownDirectories)
+        {
+            path currentPath(dir);
+            currentPath /= givenPath;
+            if (exists(currentPath))
+            {
+                return currentPath;
+            }
+        }
+
+        throw Jnrlib::Exceptions::CannotResolveSymbol(givenPath);
+    }
+
+private:
+    std::vector<std::filesystem::path> m_knownDirectories;
+};
+
 namespace Jnrlib
 {
-std::vector<char> ReadWholeFile(std::string const &given_path,
-                                bool assertIfFail)
+void RegisterDirectory(std::string_view dir)
 {
-    std::filesystem::path path(std::filesystem::absolute(given_path));
+    KnownDirectoriesStorage::Get()->RegisterDirectory(dir);
+}
+std::vector<char> ReadWholeFile(std::string const &givenPath, bool assertIfFail)
+{
+    std::filesystem::path path =
+        KnownDirectoriesStorage::Get()->ResolveFilePath(givenPath);
     std::ifstream file(path.c_str(), std::ios::binary | std::ios::ate);
     if (assertIfFail)
     {

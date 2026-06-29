@@ -62,8 +62,8 @@ void RenderSystem::OnResize()
     mPipeline.Clear();
     {
         mPipeline.SetRootSignature(&mRootSignature);
-        mPipeline.AddShader("Shaders/basic.vert.spv");
-        mPipeline.AddShader("Shaders/basic.frag.spv");
+        mPipeline.AddShader("basic.vert.spv");
+        mPipeline.AddShader("basic.frag.spv");
     }
     {
         auto &viewportState = mPipeline.GetViewportStateCreateInfo();

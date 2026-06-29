@@ -1,6 +1,7 @@
 #include "Application.h"
 
 #include "Check.h"
+#include "FileHelpers.h"
 #include "Renderer/Vulkan/CommandList.h"
 #include "Renderer/Vulkan/Renderer.h"
 
@@ -24,6 +25,7 @@ void OnResizeCallback(GLFWwindow *window, int width, int height)
 Application::Application() : mWidth(1280), mHeight(720)
 {
     InitWindow();
+    SetupKnownDirectories();
     Vulkan::Renderer::Get(GetRendererCreateInfo());
     SetMouseInputMode(false);
 }
@@ -45,6 +47,13 @@ void Application::InitWindow()
     glfwSetWindowSizeCallback(mWindow, OnResizeCallback);
 
     DSHOWINFO("Successfully created window");
+}
+
+void Application::SetupKnownDirectories()
+{
+    Jnrlib::RegisterDirectory("bin");
+    Jnrlib::RegisterDirectory("bin/Shaders");
+    Jnrlib::RegisterDirectory("Shaders");
 }
 
 Vulkan::VulkanRendererInfo Application::GetRendererCreateInfo()

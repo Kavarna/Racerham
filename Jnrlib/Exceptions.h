@@ -64,6 +64,15 @@ public:
     }
 };
 
+class CannotResolveSymbol : public JNRException
+{
+public:
+    CannotResolveSymbol(const std::string &e)
+        : JNRException("Cannot resolve symbol " + e)
+    {
+    }
+};
+
 class VulkanException : public JNRException
 {
 public:

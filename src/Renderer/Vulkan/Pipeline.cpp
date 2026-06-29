@@ -37,13 +37,13 @@ void Pipeline::SetDepthImage(Image const *img)
     mDepthFormat = img->GetFormat();
 }
 
-void Vulkan::Pipeline::SetDepthStencilImage(Image const *img)
+void Pipeline::SetDepthStencilImage(Image const *img)
 {
     mDepthFormat = img->GetFormat();
     mStencilFormat = img->GetFormat();
 }
 
-void Vulkan::Pipeline::InitFrom(Pipeline const &p)
+void Pipeline::InitFrom(Pipeline const &p)
 {
     mRootSignature = p.mRootSignature;
     mColorOutputs = p.mColorOutputs;
@@ -151,7 +151,7 @@ void Pipeline::InitDefaultPipelineState()
     mPipelineInfo.pViewportState = &mViewportState;
 }
 
-void Vulkan::Pipeline::Clear(bool reinit)
+void Pipeline::Clear(bool reinit)
 {
     VkDevice device = Renderer::Get()->GetDevice();
 

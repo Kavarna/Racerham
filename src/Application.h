@@ -32,6 +32,7 @@ public:
 
 private:
     void InitWindow();
+    void SetupKnownDirectories();
     Vulkan::VulkanRendererInfo GetRendererCreateInfo();
 
     void PostInit();

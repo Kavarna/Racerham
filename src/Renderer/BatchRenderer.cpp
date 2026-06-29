@@ -39,8 +39,8 @@ void BatchRenderer::OnResize()
     mPipeline.Clear();
     {
         mPipeline.SetRootSignature(&mRootSignature);
-        mPipeline.AddShader("Shaders/color.vert.spv");
-        mPipeline.AddShader("Shaders/color.frag.spv");
+        mPipeline.AddShader("color.vert.spv");
+        mPipeline.AddShader("color.frag.spv");
     }
     {
         auto &viewportState = mPipeline.GetViewportStateCreateInfo();
