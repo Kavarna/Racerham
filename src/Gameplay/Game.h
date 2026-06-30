@@ -52,6 +52,7 @@ public:
 
 private:
     void InitScene(Vulkan::CommandList &initCommandList);
+    void InitSystems(Vulkan::CommandList &initCommandList);
     void InitSizeDependentResources();
 
     Components::Mesh InitGeometry(std::string_view path);
@@ -68,15 +69,12 @@ private:
         Vulkan::CommandList commandList;
         Vulkan::CPUSynchronizationObject isCommandListDone;
 
-        PerFrameResource()
-            : commandList(Vulkan::CommandListType::Graphics),
-              isCommandListDone(true)
+        PerFrameResource() : commandList(Vulkan::CommandListType::Graphics), isCommandListDone(true)
         {
             commandList.Init();
         }
     };
-    std::array<PerFrameResource, Constants::MAX_IN_FLIGHT_FRAMES>
-        mPerFrameResources;
+    std::array<PerFrameResource, Constants::MAX_IN_FLIGHT_FRAMES> mPerFrameResources;
     u32 mCurrentFrame = 0;
 
     GameState mState;

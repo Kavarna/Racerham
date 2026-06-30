@@ -18,9 +18,9 @@ namespace BasicRendering
 
 RenderSystem::RenderSystem() : mPipeline("SimplePipeline")
 {
-    mPerFrameBuffer = Vulkan::Buffer(
-        sizeof(glm::mat4x4), 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+    mPerFrameBuffer = Vulkan::Buffer(sizeof(glm::mat4x4), 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+    mPerSceneBuffer = Vulkan::Buffer(sizeof(PerSceneBuffer), 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     StateInit();
 }
 
@@ -30,6 +30,7 @@ void RenderSystem::StateInit()
     {
         mDescriptorSet.AddStorageBuffer(0, 1);
         mDescriptorSet.AddInputBuffer(1, 1);
+        mDescriptorSet.AddInputBuffer(2, 1);
         mDescriptorSet.Bake(Constants::MAX_IN_FLIGHT_FRAMES);
     }
     {
@@ -81,26 +82,19 @@ void RenderSystem::OnResize()
         auto &blendState = mPipeline.GetColorBlendStateCreateInfo();
         attachmentInfo.blendEnable = VK_FALSE;
         attachmentInfo.colorWriteMask =
-            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
         blendState.attachmentCount = 1;
         blendState.pAttachments = &attachmentInfo;
     }
-    auto vertexPositionAttributeDescription =
-        VertexPositionNormal::GetInputAttributeDescription();
-    auto vertexPositionBindingDescription =
-        VertexPositionNormal::GetInputBindingDescription();
+    auto vertexPositionAttributeDescription = VertexPositionNormal::GetInputAttributeDescription();
+    auto vertexPositionBindingDescription = VertexPositionNormal::GetInputBindingDescription();
     {
         auto &vertexInput = mPipeline.GetVertexInputStateCreateInfo();
-        vertexInput.vertexAttributeDescriptionCount =
-            (u32)vertexPositionAttributeDescription.size();
-        vertexInput.pVertexAttributeDescriptions =
-            vertexPositionAttributeDescription.data();
-        vertexInput.vertexBindingDescriptionCount =
-            (u32)vertexPositionBindingDescription.size();
-        vertexInput.pVertexBindingDescriptions =
-            vertexPositionBindingDescription.data();
+        vertexInput.vertexAttributeDescriptionCount = (u32)vertexPositionAttributeDescription.size();
+        vertexInput.pVertexAttributeDescriptions = vertexPositionAttributeDescription.data();
+        vertexInput.vertexBindingDescriptionCount = (u32)vertexPositionBindingDescription.size();
+        vertexInput.pVertexBindingDescriptions = vertexPositionBindingDescription.data();
     }
     {
         auto &depthState = mPipeline.GetDepthStencilStateCreateInfo();
@@ -129,27 +123,23 @@ void RenderSystem::ResizeWorldBufferIfNeeded(u32 objectCount)
 {
     if (objectCount > mWorldBuffer.GetCount()) [[unlikely]]
     {
-        mWorldBuffer = Vulkan::Buffer(
-            sizeof(BasicPerObjectInfo), objectCount,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+        mWorldBuffer = Vulkan::Buffer(sizeof(BasicPerObjectInfo), objectCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
         mIsDirty = true;
     }
 }
 
-void RenderSystem::Render(Vulkan::CommandList &cmdList, u32 currentFrameIndex,
-                          entt::registry const &registry, u32 objectCount)
+void RenderSystem::Render(Vulkan::CommandList &cmdList, u32 currentFrameIndex, entt::registry const &registry,
+                          u32 objectCount)
 {
     ResizeWorldBufferIfNeeded(objectCount);
 
-    auto updatables =
-        registry.view<const Components::Base, const Components::Update>();
+    auto updatables = registry.view<const Components::Base, const Components::Update>();
     for (auto const &[entity, base, update] : updatables.each())
     {
         if (update.dirtyFrames)
         {
-            auto *info = (BasicPerObjectInfo *)mWorldBuffer.GetElement(
-                update.bufferIndex);
+            auto *info = (BasicPerObjectInfo *)mWorldBuffer.GetElement(update.bufferIndex);
             info->world = base.world;
             mIsDirty = true;
         }
@@ -166,23 +156,20 @@ void RenderSystem::Render(Vulkan::CommandList &cmdList, u32 currentFrameIndex,
         mDescriptorSet.SetActiveInstance(currentFrameIndex);
         mDescriptorSet.BindStorageBuffer(mWorldBuffer, 0);
         mDescriptorSet.BindInputBuffer(mPerFrameBuffer, 1);
+        mDescriptorSet.BindInputBuffer(mPerSceneBuffer, 2);
     }
 
     cmdList.BindVertexBuffer(*mVertexBuffer, 0);
     cmdList.BindIndexBuffer(*mIndexBuffer);
     cmdList.BindPipeline(mPipeline);
-    cmdList.BindDescriptorSet(mDescriptorSet, currentFrameIndex,
-                              mRootSignature);
+    cmdList.BindDescriptorSet(mDescriptorSet, currentFrameIndex, mRootSignature);
 
-    auto meshes =
-        registry.view<const Components::Update, const Components::Mesh>();
+    auto meshes = registry.view<const Components::Update, const Components::Mesh>();
     for (auto const &[entity, update, mesh] : meshes.each())
     {
         u32 index = update.bufferIndex;
         cmdList.BindPushRange<u32>(mRootSignature, 0, 1, &index);
-        cmdList.DrawIndexedInstanced(mesh.indices.indexCount,
-                                     mesh.indices.firstIndex,
-                                     mesh.indices.firstVertex);
+        cmdList.DrawIndexedInstanced(mesh.indices.indexCount, mesh.indices.firstIndex, mesh.indices.firstVertex);
     }
 }
 

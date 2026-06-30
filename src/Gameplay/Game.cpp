@@ -30,6 +30,7 @@
 Game::Game(Vulkan::CommandList &initCommandList)
 {
     InitScene(initCommandList);
+    InitSystems(initCommandList);
 
     OnResize();
 
@@ -52,29 +53,32 @@ void Game::InitScene(Vulkan::CommandList &initCommandList)
     BakeRenderingBuffers(initCommandList);
 }
 
+void Game::InitSystems(Vulkan::CommandList &initCommandList)
+{
+    mBasicRenderSystem.SetDirectionalLight(initCommandList, glm::vec3(1.0f, 1.0f, 0.0f), glm::vec4(1.0f),
+                                           glm::vec4(0.2f));
+}
+
 void Game::BakeRenderingBuffers(Vulkan::CommandList &initCommandList)
 {
     /* Create staged buffers and copy data into them */
-    Vulkan::Buffer stagingVertexBuffer = Vulkan::Buffer(
-        sizeof(VertexPositionNormal), mStagedVertexBuffer.size(),
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+    Vulkan::Buffer stagingVertexBuffer =
+        Vulkan::Buffer(sizeof(VertexPositionNormal), mStagedVertexBuffer.size(),
+                       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                       VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
     stagingVertexBuffer.Copy(mStagedVertexBuffer.data());
 
     Vulkan::Buffer stagingIndexBuffer = Vulkan::Buffer(
-        sizeof(u32), mStagedIndexBuffer.size(),
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        sizeof(u32), mStagedIndexBuffer.size(), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
     stagingIndexBuffer.Copy(mStagedIndexBuffer.data());
 
     /* Create vertex & index buffer */
-    mGlobalVertexBuffer = Vulkan::Buffer(
-        sizeof(VertexPositionNormal), mStagedVertexBuffer.size(),
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    mGlobalVertexBuffer = Vulkan::Buffer(sizeof(VertexPositionNormal), mStagedVertexBuffer.size(),
+                                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
     mGlobalIndexBuffer = Vulkan::Buffer(sizeof(u32), mStagedIndexBuffer.size(),
-                                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-                                            VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
     /* Perfom copy from staged buffer to actual buffers */
     initCommandList.CopyBuffer(mGlobalVertexBuffer, stagingVertexBuffer);
@@ -84,16 +88,15 @@ void Game::BakeRenderingBuffers(Vulkan::CommandList &initCommandList)
     initCommandList.AddLocalBuffer(std::move(stagingVertexBuffer));
     initCommandList.AddLocalBuffer(std::move(stagingIndexBuffer));
 
-    mBasicRenderSystem.SetRenderingBuffers(&mGlobalVertexBuffer,
-                                           &mGlobalIndexBuffer);
+    mBasicRenderSystem.SetRenderingBuffers(&mGlobalVertexBuffer, &mGlobalIndexBuffer);
 }
 
 void Game::InitSizeDependentResources()
 {
     glm::vec2 windowDimensions = Application::Get()->GetWindowDimensions();
     /* Create simple camera */
-    mCamera = Camera(glm::vec3(0.0f, 0.0f, -5.0f), (f32)windowDimensions.x,
-                     (f32)windowDimensions.y, glm::pi<float>() / 4);
+    mCamera =
+        Camera(glm::vec3(0.0f, 3.0f, -5.0f), (f32)windowDimensions.x, (f32)windowDimensions.y, glm::pi<float>() / 4);
 
     Vulkan::Image::Info2D depthInfo;
     {
@@ -166,29 +169,59 @@ Components::Mesh Game::InitGeometry(std::string_view path)
         mStagedIndexBuffer.reserve(mStagedIndexBuffer.size() + 36);
 
         // Define cube vertices (position + normal)
-        mStagedVertexBuffer.emplace_back(-1.0f, -1.0f, -1.0f, 0.0f, 0.0f,
-                                         -1.0f);
+        // mStagedVertexBuffer.emplace_back(-1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f);
+        // mStagedVertexBuffer.emplace_back(1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f);
+        // mStagedVertexBuffer.emplace_back(1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f);
+        // mStagedVertexBuffer.emplace_back(-1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f);
+        //
+        // mStagedVertexBuffer.emplace_back(-1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f);
+        // mStagedVertexBuffer.emplace_back(1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f);
+        // mStagedVertexBuffer.emplace_back(1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f);
+        // mStagedVertexBuffer.emplace_back(-1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f);
+        //
+        mStagedVertexBuffer.emplace_back(-1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f);
         mStagedVertexBuffer.emplace_back(1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f);
         mStagedVertexBuffer.emplace_back(1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f);
         mStagedVertexBuffer.emplace_back(-1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f);
-
         mStagedVertexBuffer.emplace_back(-1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f);
         mStagedVertexBuffer.emplace_back(1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f);
         mStagedVertexBuffer.emplace_back(1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f);
         mStagedVertexBuffer.emplace_back(-1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f);
+        mStagedVertexBuffer.emplace_back(-1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(-1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(-1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(-1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(-1.0f, -1.0f, -1.0f, -1.0f, 0.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(-1.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(-1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(-1.0f, -1.0f, 1.0f, -1.0f, 0.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f);
+        mStagedVertexBuffer.emplace_back(1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f);
 
         // Define cube indices (two triangles per face, six faces)
+        // u32 indices[] = {
+        //     0, 1, 2, 0, 2, 3, // Back face
+        //     4, 5, 6, 4, 6, 7, // Front face
+        //     0, 1, 5, 0, 5, 4, // Bottom face
+        //     3, 2, 6, 3, 6, 7, // Top face
+        //     0, 3, 7, 0, 7, 4, // Left face
+        //     1, 2, 6, 1, 6, 5  // Right face
+        // };
         u32 indices[] = {
-            0, 1, 2, 0, 2, 3, // Back face
-            4, 5, 6, 4, 6, 7, // Front face
-            0, 1, 5, 0, 5, 4, // Bottom face
-            3, 2, 6, 3, 6, 7, // Top face
-            0, 3, 7, 0, 7, 4, // Left face
-            1, 2, 6, 1, 6, 5  // Right face
+            0,  1,  2,  0,  2,  3,  // back
+            4,  5,  6,  4,  6,  7,  // front
+            8,  9,  10, 8,  10, 11, // bottom
+            12, 13, 14, 12, 14, 15, // top
+            16, 17, 18, 16, 18, 19, // left
+            20, 21, 22, 20, 22, 23  // right
         };
-
-        mStagedIndexBuffer.insert(mStagedIndexBuffer.end(), std::begin(indices),
-                                  std::end(indices));
+        mStagedIndexBuffer.insert(mStagedIndexBuffer.end(), std::begin(indices), std::end(indices));
 
         mesh.path = path;
         mesh.indices.firstIndex = firstIndex;
@@ -200,8 +233,7 @@ Components::Mesh Game::InitGeometry(std::string_view path)
     }
 
     /* Very javaeque of me */
-    throw Jnrlib::Exceptions::JNRException(
-        Format("Could not find mesh for path ", path));
+    throw Jnrlib::Exceptions::JNRException(Format("Could not find mesh for path ", path));
     return {};
 }
 
@@ -211,21 +243,16 @@ Entity *Game::AddTestEntity(std::string_view name)
 
     glm::mat4x4 world = glm::identity<glm::mat4x4>();
     world = glm::translate(world, glm::vec3(0.0f, 5.0f, 0.0f));
-    entity->AddComponent(Components::Base{.world = world,
-                                          .name = std::string(name),
-                                          .inverseWorld = glm::inverse(world),
-                                          .entityPtr = entity});
+    entity->AddComponent(Components::Base{
+        .world = world, .name = std::string(name), .inverseWorld = glm::inverse(world), .entityPtr = entity});
     entity->AddComponent(
-        Components::Update{.dirtyFrames = Constants::MAX_IN_FLIGHT_FRAMES,
-                           .bufferIndex = (u32)mEntities.size()});
-    mRegistry.on_update<Components::Base>().connect<&Entity::UpdateBase>(
-        entity);
+        Components::Update{.dirtyFrames = Constants::MAX_IN_FLIGHT_FRAMES, .bufferIndex = (u32)mEntities.size()});
+    mRegistry.on_update<Components::Base>().connect<&Entity::UpdateBase>(entity);
     entity->UpdateBase();
 
     entity->AddComponent(InitGeometry("cube"));
-    entity->AddComponent(mPhysicsSystem.CreateRigidBody(
-        entity->GetComponent<Components::Base>(),
-        entity->GetComponent<Components::Mesh>(), 1.0f));
+    entity->AddComponent(mPhysicsSystem.CreateRigidBody(entity->GetComponent<Components::Base>(),
+                                                        entity->GetComponent<Components::Mesh>(), 1.0f));
 
     mEntities.push_back(entity);
 
@@ -239,21 +266,16 @@ Entity *Game::AddGround()
     glm::mat4x4 world = glm::identity<glm::mat4x4>();
     world = glm::translate(world, glm::vec3(0.0f, -50.0f, 0.0f));
     world = glm::scale(world, glm::vec3(50.f, 50.f, 50.f));
-    entity->AddComponent(Components::Base{.world = world,
-                                          .name = std::string("Ground"),
-                                          .inverseWorld = glm::inverse(world),
-                                          .entityPtr = entity});
+    entity->AddComponent(Components::Base{
+        .world = world, .name = std::string("Ground"), .inverseWorld = glm::inverse(world), .entityPtr = entity});
     entity->AddComponent(
-        Components::Update{.dirtyFrames = Constants::MAX_IN_FLIGHT_FRAMES,
-                           .bufferIndex = (u32)mEntities.size()});
-    mRegistry.on_update<Components::Base>().connect<&Entity::UpdateBase>(
-        entity);
+        Components::Update{.dirtyFrames = Constants::MAX_IN_FLIGHT_FRAMES, .bufferIndex = (u32)mEntities.size()});
+    mRegistry.on_update<Components::Base>().connect<&Entity::UpdateBase>(entity);
     entity->UpdateBase();
 
     entity->AddComponent(InitGeometry("cube"));
-    entity->AddComponent(mPhysicsSystem.CreateRigidBody(
-        entity->GetComponent<Components::Base>(),
-        entity->GetComponent<Components::Mesh>(), 0.0f));
+    entity->AddComponent(mPhysicsSystem.CreateRigidBody(entity->GetComponent<Components::Base>(),
+                                                        entity->GetComponent<Components::Mesh>(), 0.0f));
 
     mEntities.push_back(entity);
 
@@ -273,23 +295,19 @@ void Game::Update(float dt)
     }
 
     constexpr float cameraSpeed = 5.0f;
-    if (application->IsKeyPressed(GLFW_KEY_W) ||
-        application->IsKeyPressed(GLFW_KEY_UP))
+    if (application->IsKeyPressed(GLFW_KEY_W) || application->IsKeyPressed(GLFW_KEY_UP))
     {
         mCamera.MoveForward(dt * cameraSpeed);
     }
-    if (application->IsKeyPressed(GLFW_KEY_S) ||
-        application->IsKeyPressed(GLFW_KEY_DOWN))
+    if (application->IsKeyPressed(GLFW_KEY_S) || application->IsKeyPressed(GLFW_KEY_DOWN))
     {
         mCamera.MoveBackward(dt * cameraSpeed);
     }
-    if (application->IsKeyPressed(GLFW_KEY_A) ||
-        application->IsKeyPressed(GLFW_KEY_LEFT))
+    if (application->IsKeyPressed(GLFW_KEY_A) || application->IsKeyPressed(GLFW_KEY_LEFT))
     {
         mCamera.StrafeLeft(dt * cameraSpeed);
     }
-    if (application->IsKeyPressed(GLFW_KEY_D) ||
-        application->IsKeyPressed(GLFW_KEY_RIGHT))
+    if (application->IsKeyPressed(GLFW_KEY_D) || application->IsKeyPressed(GLFW_KEY_RIGHT))
     {
         mCamera.StrafeRight(dt * cameraSpeed);
     }
@@ -327,10 +345,8 @@ void Game::Render()
     cmdList.Begin();
     {
         f32 backgroundColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-        cmdList.BeginRenderingOnBackbuffer(backgroundColor, &mDepthImage,
-                                           false);
-        mBasicRenderSystem.Render(cmdList, mCurrentFrame, mRegistry,
-                                  mEntities.size());
+        cmdList.BeginRenderingOnBackbuffer(backgroundColor, &mDepthImage, false);
+        mBasicRenderSystem.Render(cmdList, mCurrentFrame, mRegistry, mEntities.size());
         mBatchRenderer.Render(cmdList, mCamera);
         cmdList.EndRendering();
     }
